@@ -173,3 +173,88 @@ async def test_s2_fetcher_falls_back_to_citation_count():
     )
     papers = await SemanticScholarFetcher().fetch(SearchQuery(query="test", top_n=5))
     assert papers[0].citation_count == 80
+
+
+from nexus_paper_fetcher.fetchers.openreview import OpenReviewFetcher
+
+OR_SUBMISSIONS = {
+    "notes": [
+        {
+            "id": "note1",
+            "forum": "forum1",
+            "content": {
+                "title": {"value": "FlashAttention: Fast Memory-Efficient Attention"},
+                "abstract": {"value": "We propose FlashAttention."},
+                "authors": {"value": ["Dao, T.", "Fu, D."]},
+            },
+        },
+        {
+            "id": "note2",
+            "forum": "forum2",
+            "content": {
+                "title": {"value": "A Rejected Paper"},
+                "abstract": {"value": "This was rejected."},
+                "authors": {"value": ["Smith, J."]},
+            },
+        },
+    ]
+}
+
+OR_DECISIONS = {
+    "notes": [
+        {
+            "forum": "forum1",
+            "content": {"decision": {"value": "Accept (Oral)"}},
+        },
+        {
+            "forum": "forum2",
+            "content": {"decision": {"value": "Reject"}},
+        },
+    ]
+}
+
+
+@respx.mock
+async def test_openreview_fetcher_parses_accepted_papers():
+    respx.get("https://api2.openreview.net/notes").mock(
+        side_effect=lambda req: (
+            httpx.Response(200, json=OR_SUBMISSIONS)
+            if "Blind_Submission" in str(req.url)
+            else httpx.Response(200, json=OR_DECISIONS)
+        )
+    )
+    papers = await OpenReviewFetcher().fetch(
+        SearchQuery(query="attention", top_n=5, year_from=2022, year_to=2022)
+    )
+    accepted = [p for p in papers if p.title == "FlashAttention: Fast Memory-Efficient Attention"]
+    rejected = [p for p in papers if p.title == "A Rejected Paper"]
+    assert len(accepted) >= 1
+    assert len(rejected) == 0
+
+
+@respx.mock
+async def test_openreview_fetcher_sets_oral_tier():
+    respx.get("https://api2.openreview.net/notes").mock(
+        side_effect=lambda req: (
+            httpx.Response(200, json=OR_SUBMISSIONS)
+            if "Blind_Submission" in str(req.url)
+            else httpx.Response(200, json=OR_DECISIONS)
+        )
+    )
+    papers = await OpenReviewFetcher().fetch(
+        SearchQuery(query="attention", top_n=5, year_from=2022, year_to=2022)
+    )
+    oral_papers = [p for p in papers if p.openreview_tier == "oral"]
+    assert len(oral_papers) >= 1
+
+
+@respx.mock
+async def test_openreview_fetcher_handles_404_venue():
+    # Venue+year not found → returns empty, no crash
+    respx.get("https://api2.openreview.net/notes").mock(
+        return_value=httpx.Response(404)
+    )
+    papers = await OpenReviewFetcher().fetch(
+        SearchQuery(query="test", top_n=5, year_from=2022, year_to=2022)
+    )
+    assert papers == []
