@@ -116,3 +116,60 @@ async def test_openalex_fetcher_handles_missing_fields():
     assert p2.doi is None
     assert p2.abstract is None
     assert p2.authors == []
+
+
+from nexus_paper_fetcher.fetchers.semantic_scholar import SemanticScholarFetcher
+
+S2_RESPONSE = {
+    "total": 1,
+    "data": [
+        {
+            "paperId": "ss_abc123",
+            "title": "Scalable Transformer Architecture",
+            "abstract": "We propose a scalable transformer.",
+            "year": 2023,
+            "venue": "NeurIPS",
+            "authors": [{"name": "Doe, J."}, {"name": "Lee, A."}],
+            "citationCount": 120,
+            "influentialCitationCount": 45,
+            "openAccessPdf": {"url": "https://arxiv.org/pdf/2301.00001"},
+            "externalIds": {"DOI": "10.1145/test", "ArXiv": "2301.00001"},
+            "tldr": {"text": "A scalable transformer."},
+        }
+    ],
+}
+
+
+@respx.mock
+async def test_s2_fetcher_parses_papers():
+    respx.get("https://api.semanticscholar.org/graph/v1/paper/search").mock(
+        return_value=httpx.Response(200, json=S2_RESPONSE)
+    )
+    papers = await SemanticScholarFetcher().fetch(SearchQuery(query="transformer", top_n=5))
+    assert len(papers) == 1
+    p = papers[0]
+    assert p.title == "Scalable Transformer Architecture"
+    assert p.doi == "10.1145/test"
+    assert p.arxiv_id == "2301.00001"
+    assert p.semantic_scholar_id == "ss_abc123"
+    assert p.open_access_pdf_url == "https://arxiv.org/pdf/2301.00001"
+    assert p.citation_count == 45  # uses influentialCitationCount
+    assert "semantic_scholar" in p.sources
+
+
+@respx.mock
+async def test_s2_fetcher_falls_back_to_citation_count():
+    # influentialCitationCount == 0, should fall back to citationCount
+    data = {
+        "total": 1,
+        "data": [{
+            "paperId": "x", "title": "T", "year": 2022,
+            "citationCount": 80, "influentialCitationCount": 0,
+            "externalIds": {}, "authors": [], "openAccessPdf": None,
+        }],
+    }
+    respx.get("https://api.semanticscholar.org/graph/v1/paper/search").mock(
+        return_value=httpx.Response(200, json=data)
+    )
+    papers = await SemanticScholarFetcher().fetch(SearchQuery(query="test", top_n=5))
+    assert papers[0].citation_count == 80
