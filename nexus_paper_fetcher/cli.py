@@ -14,6 +14,11 @@ from nexus_paper_fetcher.pipeline import run
 app = typer.Typer(help="Nexus Paper Fetcher — ranked academic paper search")
 
 
+@app.callback()
+def main() -> None:
+    """Nexus Paper Fetcher — ranked academic paper search"""
+
+
 def _auto_output_path(query: str, top_n: int) -> Path:
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
     import re
