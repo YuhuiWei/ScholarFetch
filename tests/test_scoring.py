@@ -148,3 +148,52 @@ async def test_relevance_scores_between_zero_and_one(monkeypatch):
 
     scores = await RelevanceScorer.score_batch("query", ["some abstract"])
     assert 0.0 <= scores[0] <= 1.0
+
+
+from unittest.mock import AsyncMock, patch
+from nexus_paper_fetcher.models import Paper
+from nexus_paper_fetcher.scoring.scorer import score_all, DOMAIN_WEIGHTS
+
+
+async def test_composite_score_in_range(sample_papers, monkeypatch):
+    import nexus_paper_fetcher.scoring.relevance as rel
+    monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+    result = await score_all(sample_papers, "gene expression", "biology")
+    for p in result:
+        assert 0.0 <= p.scores.composite <= 1.0
+
+
+async def test_composite_uses_domain_weights(sample_papers, monkeypatch):
+    import nexus_paper_fetcher.scoring.relevance as rel
+    monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+    # cs_ml weights recency heavily; biology weights citation heavily
+    await score_all(sample_papers[:1], "test", "cs_ml")
+    cs_recency_weight = DOMAIN_WEIGHTS["cs_ml"]["recency"]
+    bio_recency_weight = DOMAIN_WEIGHTS["biology"]["recency"]
+    assert cs_recency_weight > bio_recency_weight
+
+
+async def test_composite_oral_bonus_applied(monkeypatch):
+    import nexus_paper_fetcher.scoring.relevance as rel
+    monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+    oral = Paper.create(title="Oral Paper", year=2023, venue="NeurIPS",
+                        openreview_tier="oral", citation_count=100, sources=["openreview"])
+    no_bonus = Paper.create(title="Regular Paper", year=2023, venue="NeurIPS",
+                             citation_count=100, sources=["openalex"])
+    papers = await score_all([oral, no_bonus], "test", "cs_ml")
+    oral_p = next(p for p in papers if p.openreview_tier == "oral")
+    regular_p = next(p for p in papers if p.openreview_tier is None)
+    assert oral_p.scores.openreview_bonus == 0.15
+    assert regular_p.scores.openreview_bonus == 0.0
+    assert oral_p.scores.composite > regular_p.scores.composite
+
+
+async def test_composite_capped_at_one(monkeypatch):
+    import nexus_paper_fetcher.scoring.relevance as rel
+    monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+    # High citation + oral bonus: shouldn't exceed 1.0
+    paper = Paper.create(title="T", year=2024, venue="NeurIPS",
+                         openreview_tier="oral", citation_count=100000,
+                         sources=["openreview"])
+    result = await score_all([paper], "test", "cs_ml")
+    assert result[0].scores.composite <= 1.0
