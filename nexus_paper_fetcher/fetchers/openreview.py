@@ -73,7 +73,7 @@ class OpenReviewFetcher(BaseFetcher):
         target = query.resolved_fetch_per_source()
 
         tasks = [
-            self._fetch_venue_year(client, venue, year, query.query)
+            self._fetch_venue_year(client, venue, year)
             for venue in VENUE_INVITATIONS
             for year in range(year_from, year_to + 1)
         ]
@@ -87,13 +87,13 @@ class OpenReviewFetcher(BaseFetcher):
         return papers[:target]
 
     async def _fetch_venue_year(
-        self, client: httpx.AsyncClient, venue: str, year: int, query_term: str
+        self, client: httpx.AsyncClient, venue: str, year: int
     ) -> list[Paper]:
         sub_inv = VENUE_INVITATIONS[venue].format(year=year)
         dec_inv = DECISION_INVITATIONS[venue].format(year=year)
 
         sub_resp = await client.get(BASE_URL, params={
-            "invitation": sub_inv, "term": query_term, "limit": 100,
+            "invitation": sub_inv, "limit": 100,
         })
         if sub_resp.status_code == 404:
             return []
