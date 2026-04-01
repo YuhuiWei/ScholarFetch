@@ -1,0 +1,80 @@
+venues:
+  # CS/ML — Tier 1
+  - {name: "NeurIPS", tier: 1, domain: cs_ml}
+  - {name: "Neural Information Processing Systems", tier: 1, domain: cs_ml}
+  - {name: "ICML", tier: 1, domain: cs_ml}
+  - {name: "International Conference on Machine Learning", tier: 1, domain: cs_ml}
+  - {name: "ICLR", tier: 1, domain: cs_ml}
+  - {name: "International Conference on Learning Representations", tier: 1, domain: cs_ml}
+  - {name: "Nature Machine Intelligence", tier: 1, domain: cs_ml}
+  - {name: "Journal of Machine Learning Research", tier: 1, domain: cs_ml}
+  - {name: "JMLR", tier: 1, domain: cs_ml}
+  - {name: "IEEE Transactions on Pattern Analysis and Machine Intelligence", tier: 1, domain: cs_ml}
+  - {name: "TPAMI", tier: 1, domain: cs_ml}
+  # CS/ML — Tier 2
+  - {name: "AAAI", tier: 2, domain: cs_ml}
+  - {name: "IJCAI", tier: 2, domain: cs_ml}
+  - {name: "CVPR", tier: 2, domain: cs_ml}
+  - {name: "ICCV", tier: 2, domain: cs_ml}
+  - {name: "ECCV", tier: 2, domain: cs_ml}
+  - {name: "ACL", tier: 2, domain: cs_ml}
+  - {name: "EMNLP", tier: 2, domain: cs_ml}
+  - {name: "NAACL", tier: 2, domain: cs_ml}
+  - {name: "KDD", tier: 2, domain: cs_ml}
+  - {name: "AISTATS", tier: 2, domain: cs_ml}
+  - {name: "UAI", tier: 2, domain: cs_ml}
+  - {name: "IEEE Transactions on Neural Networks and Learning Systems", tier: 2, domain: cs_ml}
+  # CS/ML — Tier 3
+  - {name: "WACV", tier: 3, domain: cs_ml}
+  - {name: "COLING", tier: 3, domain: cs_ml}
+  - {name: "ECML PKDD", tier: 3, domain: cs_ml}
+  # Biology — Tier 1
+  - {name: "Nature", tier: 1, domain: biology}
+  - {name: "Science", tier: 1, domain: biology}
+  - {name: "Cell", tier: 1, domain: biology}
+  - {name: "Nature Methods", tier: 1, domain: biology}
+  - {name: "Nature Biotechnology", tier: 1, domain: biology}
+  - {name: "Nature Genetics", tier: 1, domain: biology}
+  - {name: "Nature Medicine", tier: 1, domain: biology}
+  - {name: "PNAS", tier: 1, domain: biology}
+  - {name: "Proceedings of the National Academy of Sciences", tier: 1, domain: biology}
+  - {name: "eLife", tier: 1, domain: biology}
+  - {name: "Genome Biology", tier: 1, domain: biology}
+  - {name: "Nature Cell Biology", tier: 1, domain: biology}
+  - {name: "Molecular Cell", tier: 1, domain: biology}
+  # Biology — Tier 2
+  - {name: "Cell Systems", tier: 2, domain: biology}
+  - {name: "Nature Communications", tier: 2, domain: biology}
+  - {name: "PLOS Biology", tier: 2, domain: biology}
+  - {name: "Genome Research", tier: 2, domain: biology}
+  - {name: "Nucleic Acids Research", tier: 2, domain: biology}
+  - {name: "Bioinformatics", tier: 2, domain: biology}
+  - {name: "Briefings in Bioinformatics", tier: 2, domain: biology}
+  # Biology — Tier 3
+  - {name: "BMC Bioinformatics", tier: 3, domain: biology}
+  - {name: "PLOS Computational Biology", tier: 3, domain: biology}
+  - {name: "BMC Genomics", tier: 3, domain: biology}
+  - {name: "Frontiers in Bioinformatics", tier: 3, domain: biology}
+  # Chemistry — Tier 1
+  - {name: "Nature Chemistry", tier: 1, domain: chemistry}
+  - {name: "Journal of the American Chemical Society", tier: 1, domain: chemistry}
+  - {name: "JACS", tier: 1, domain: chemistry}
+  - {name: "Angewandte Chemie International Edition", tier: 1, domain: chemistry}
+  - {name: "Chemical Science", tier: 1, domain: chemistry}
+  # Chemistry — Tier 2
+  - {name: "Journal of Chemical Theory and Computation", tier: 2, domain: chemistry}
+  - {name: "Chemical Communications", tier: 2, domain: chemistry}
+  - {name: "ACS Nano", tier: 2, domain: chemistry}
+  - {name: "Chemistry of Materials", tier: 2, domain: chemistry}
+  # Chemistry — Tier 3
+  - {name: "Journal of Organic Chemistry", tier: 3, domain: chemistry}
+  - {name: "ACS Applied Materials and Interfaces", tier: 3, domain: chemistry}
+  # General — Tier 1
+  - {name: "The Lancet", tier: 1, domain: general}
+  - {name: "New England Journal of Medicine", tier: 1, domain: general}
+  - {name: "NEJM", tier: 1, domain: general}
+  # General — Tier 2
+  - {name: "Scientific Reports", tier: 2, domain: general}
+  - {name: "PLOS ONE", tier: 2, domain: general}
+  - {name: "BMJ", tier: 2, domain: general}
+  - {name: "JAMA", tier: 2, domain: general}
