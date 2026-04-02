@@ -54,7 +54,8 @@ async def resolve(
     ezproxy: Optional[EZProxySession] = None,
     skip_ezproxy: bool = False,
 ) -> ManifestEntry:
-    filename = f"rank_{rank:02d}_{_sanitize_title(paper.title)}.pdf"
+    sanitized = _sanitize_title(paper.title) or paper.paper_id
+    filename = f"rank_{rank:02d}_{sanitized}.pdf"
     file_path = output_dir / filename
 
     # Source 1: open_access_pdf_url (covers OA, arXiv URLs from S2, OpenReview)
