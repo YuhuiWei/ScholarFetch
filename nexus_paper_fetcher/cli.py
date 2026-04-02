@@ -10,8 +10,10 @@ import typer
 
 from nexus_paper_fetcher.models import SearchQuery
 from nexus_paper_fetcher.pipeline import run
+from nexus_paper_fetcher.download.cli import download_command
 
 app = typer.Typer(help="Nexus Paper Fetcher — ranked academic paper search")
+app.command("download")(download_command)
 
 
 @app.callback()

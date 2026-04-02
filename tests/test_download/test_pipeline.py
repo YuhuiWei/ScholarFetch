@@ -153,3 +153,40 @@ async def test_ezproxy_auth_failure_still_downloads_free_sources(tmp_path, monke
         _make_results_file(tmp_path), output_dir, skip_ezproxy=False
     )
     assert sum(1 for e in manifest.entries if e.status == "success") == 2
+
+
+# ── CLI smoke tests ────────────────────────────────────────────────────────
+
+@respx.mock
+def test_cli_download_command(tmp_path):
+    """nexus download results.json runs without error for a valid input."""
+    from typer.testing import CliRunner
+    from nexus_paper_fetcher.cli import app
+
+    respx.get("https://example.com/p1.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    respx.get("https://arxiv.org/pdf/2201.00001.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+
+    results_path = _make_results_file(tmp_path)
+    output_dir = tmp_path / "papers"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["download", str(results_path), "--output-dir", str(output_dir), "--skip-ezproxy"],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_cli_missing_results_file_exits_1(tmp_path):
+    from typer.testing import CliRunner
+    from nexus_paper_fetcher.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["download", str(tmp_path / "nonexistent.json"), "--skip-ezproxy"],
+    )
+    assert result.exit_code == 1
