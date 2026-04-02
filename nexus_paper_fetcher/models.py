@@ -28,6 +28,12 @@ class SearchQuery(BaseModel):
     author: Optional[str] = None
     journal: Optional[str] = None
     fetch_per_source: int = 0  # 0 = auto: max(3*top_n, 100)
+    keyword_count: Optional[int] = None
+    paper_titles: list[str] = Field(default_factory=list)
+    weight_preferences: list[str] = Field(default_factory=list)
+    venue_preferences: list[str] = Field(default_factory=list)
+    publication_categories: list[str] = Field(default_factory=list)
+    keyword_logic: str = "AUTO"
 
     def resolved_fetch_per_source(self) -> int:
         return self.fetch_per_source or max(3 * self.top_n, 100)
@@ -57,6 +63,9 @@ class Paper(BaseModel):
     openreview_tier: Optional[str] = None
     sources: list[str] = Field(default_factory=list)
     citation_count: Optional[int] = None
+    publication_type: Optional[str] = None
+    keywords: list[str] = Field(default_factory=list)
+    methodology_category: Optional[str] = None
     scores: ScoreBreakdown = Field(default_factory=ScoreBreakdown)
 
     @classmethod
