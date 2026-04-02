@@ -24,7 +24,7 @@ class EZProxySession:
                 data={"user": username, "pass": password},
                 follow_redirects=False,
             )
-            if response.status_code not in (200, 302):
+            if response.status_code != 302:
                 logger.warning(f"EZproxy auth failed: HTTP {response.status_code}")
                 return False
             return True

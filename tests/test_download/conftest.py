@@ -1,3 +1,4 @@
-# Shared constants used across all test_download tests
-FAKE_PDF = b"%PDF-1.4 fake pdf content for testing"
-FAKE_HTML = b"<html><body>Access denied</body></html>"
+# Import shared constants from constants module
+from tests.test_download.constants import FAKE_PDF, FAKE_HTML
+
+__all__ = ["FAKE_PDF", "FAKE_HTML"]

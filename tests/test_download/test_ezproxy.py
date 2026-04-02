@@ -3,7 +3,7 @@ import httpx
 import pytest
 import respx
 from nexus_paper_fetcher.download.ezproxy import EZProxySession, EZPROXY_LOGIN_URL
-from tests.test_download.conftest import FAKE_PDF, FAKE_HTML
+from tests.test_download.constants import FAKE_PDF, FAKE_HTML
 
 
 @pytest.fixture
