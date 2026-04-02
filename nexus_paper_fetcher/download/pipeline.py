@@ -28,7 +28,7 @@ async def run_download(
     with open(results_path) as f:
         run_result = RunResult.model_validate(json.load(f))
 
-    papers = run_result.papers[:top_n] if top_n else run_result.papers
+    papers = run_result.papers[:top_n] if top_n is not None else run_result.papers
     manifest_path = output_dir / "manifest.json"
     manifest = load_manifest(manifest_path)
     already_done = manifest.successful_ids()
