@@ -10,7 +10,7 @@ class ManifestEntry(BaseModel):
     title: str
     rank: int
     score: float
-    status: Literal["success", "failed", "skipped"]
+    status: Literal["success", "failed"]
     source_used: Optional[Literal["open_access_url", "arxiv", "ezproxy"]] = None
     file_path: Optional[str] = None
     file_size_kb: Optional[int] = None

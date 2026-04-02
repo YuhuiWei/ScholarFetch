@@ -33,6 +33,8 @@ class EZProxySession:
             return False
 
     async def get_pdf(self, doi: str) -> bytes | None:
+        # EZProxy bookmarklet entry point: session cookie from authenticate() is
+        # sent automatically; EZProxy rewrites the DOI URL through the proxy.
         url = f"{EZPROXY_LOGIN_URL}?url=https://doi.org/{doi}"
         try:
             response = await self._client.get(url, follow_redirects=True)

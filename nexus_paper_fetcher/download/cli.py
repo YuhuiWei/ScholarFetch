@@ -6,7 +6,9 @@ from typing import Optional
 import typer
 from nexus_paper_fetcher.download.pipeline import run_download
 
-_DEFAULT_OUTPUT_DIR = Path("/home/groups/BDRL_RDS/yuhui/papers")
+_DEFAULT_OUTPUT_DIR = Path(
+    __import__("os").environ.get("NEXUS_PDF_DIR", "papers")
+)
 
 
 def download_command(

@@ -73,6 +73,9 @@ async def run_download(
                     ezproxy=ezproxy,
                     skip_ezproxy=skip_ezproxy,
                 )
+                # upsert + save are both synchronous (no await between them), so
+                # they cannot be interleaved by the asyncio event loop even with
+                # Semaphore(3). Safe without an explicit lock.
                 manifest.upsert(entry)
                 save_manifest(manifest, manifest_path)
                 icon = "ok" if entry.status == "success" else "fail"
