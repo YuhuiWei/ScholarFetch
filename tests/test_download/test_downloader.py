@@ -1,6 +1,7 @@
 from __future__ import annotations
 import inspect
 from pathlib import Path
+import re
 import httpx
 import respx
 from nexus_paper_fetcher.models import Paper, ScoreBreakdown
@@ -10,6 +11,13 @@ from tests.test_download.constants import FAKE_PDF, FAKE_HTML
 ELSEVIER_FULL_TEXT_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
 <full-text-retrieval-response><coredata><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Cell Paper</dc:title></coredata></full-text-retrieval-response>
 """
+
+
+def _elsevier_api_pattern(doi: str) -> re.Pattern[str]:
+    escaped_doi = re.escape(doi)
+    return re.compile(
+        rf"^https://api\.elsevier\.com/content/article/doi/{escaped_doi}(?:\\?.*)?$"
+    )
 
 
 def _paper(**overrides) -> Paper:
@@ -366,15 +374,20 @@ async def test_elsevier_full_text_xml_fallback(tmp_path, monkeypatch):
     respx.get("https://api.unpaywall.org/v2/10.1016/j.cell.2024.01.026").mock(
         return_value=httpx.Response(404, json={})
     )
-    elsevier_route = respx.get(
-        "https://api.elsevier.com/content/article/doi/10.1016/j.cell.2024.01.026"
-    ).mock(
-        return_value=httpx.Response(
-            200,
-            content=ELSEVIER_FULL_TEXT_RESPONSE.encode("utf-8"),
-            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
+    def elsevier_side_effect(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("X-ELS-APIKey") != "test-key":
+            return httpx.Response(401)
+        if "application/xml" not in request.headers.get("Accept", ""):
+            return httpx.Response(406)
+        if request.url.params.get("view") != "FULL":
+            return httpx.Response(400)
+        return httpx.Response(
+            200, content=ELSEVIER_FULL_TEXT_RESPONSE.encode("utf-8")
         )
-    )
+
+    elsevier_route = respx.get(
+        _elsevier_api_pattern("10.1016/j.cell.2024.01.026")
+    ).mock(side_effect=elsevier_side_effect)
     paper = _paper(
         doi="10.1016/j.cell.2024.01.026",
         open_access_pdf_url=None,
@@ -383,6 +396,12 @@ async def test_elsevier_full_text_xml_fallback(tmp_path, monkeypatch):
     async with httpx.AsyncClient() as client:
         entry = await resolve(paper, rank=6, output_dir=tmp_path, session=client)
     assert entry.status == "success"
+    assert entry.source_used == "elsevier_api"
+    assert entry.file_path is not None
+    entry_path = Path(entry.file_path)
+    assert entry_path.exists()
+    assert entry_path.suffix == ".xml"
+    assert entry_path.read_bytes().startswith(b"<?xml")
     assert elsevier_route.call_count == 1
 
 
@@ -400,12 +419,11 @@ async def test_elsevier_skips_without_api_key(tmp_path, monkeypatch):
         return_value=httpx.Response(404, json={})
     )
     elsevier_route = respx.get(
-        "https://api.elsevier.com/content/article/doi/10.1016/j.cell.2024.01.026"
+        _elsevier_api_pattern("10.1016/j.cell.2024.01.026")
     ).mock(
         return_value=httpx.Response(
             200,
             content=ELSEVIER_FULL_TEXT_RESPONSE.encode("utf-8"),
-            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
         )
     )
     paper = _paper(
@@ -433,12 +451,11 @@ async def test_non_elsevier_doi_does_not_call_elsevier(tmp_path, monkeypatch):
         return_value=httpx.Response(404, json={})
     )
     elsevier_route = respx.get(
-        "https://api.elsevier.com/content/article/doi/10.5555/test.paper"
+        _elsevier_api_pattern("10.5555/test.paper")
     ).mock(
         return_value=httpx.Response(
             200,
             content=ELSEVIER_FULL_TEXT_RESPONSE.encode("utf-8"),
-            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
         )
     )
     paper = _paper(open_access_pdf_url=None, arxiv_id=None)
