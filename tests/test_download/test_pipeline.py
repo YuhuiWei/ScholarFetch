@@ -309,7 +309,7 @@ async def test_run_download_falls_back_to_elsevier_xml_after_oa_failures(
     respx.get("https://api.unpaywall.org/v2/10.1016/j.cell.2024.01.026").mock(
         return_value=httpx.Response(404, json={})
     )
-    respx.get(
+    elsevier_route = respx.get(
         "https://api.elsevier.com/content/article/doi/10.1016/j.cell.2024.01.026"
     ).mock(
         return_value=httpx.Response(
@@ -329,8 +329,10 @@ async def test_run_download_falls_back_to_elsevier_xml_after_oa_failures(
     entry = manifest.entries[0]
     assert entry.status == "success"
     assert entry.source_used == "elsevier_api"
+    assert elsevier_route.call_count >= 1
     assert entry.file_path is not None
     file_path = Path(entry.file_path)
+    assert file_path.parent == output_dir
     assert file_path.suffix == ".xml"
     assert file_path.exists()
 

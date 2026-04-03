@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -7,7 +8,8 @@ import typer
 from nexus_paper_fetcher.download.pipeline import run_download
 
 _DEFAULT_OUTPUT_DIR = Path(
-    __import__("os").environ.get("NEXUS_PDF_DIR", "papers")
+    os.environ.get("NEXUS_DOWNLOAD_DIR")
+    or os.environ.get("NEXUS_PDF_DIR", "papers")
 )
 
 
