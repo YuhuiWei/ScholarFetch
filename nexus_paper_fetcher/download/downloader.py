@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 import httpx
 from nexus_paper_fetcher.models import Paper
-from nexus_paper_fetcher.download.manifest import ManifestEntry
+from nexus_paper_fetcher.download.manifest import ManifestEntry, SourceUsed
 from nexus_paper_fetcher.fetchers.openalex import extract_open_access_pdf_url
 
 logger = logging.getLogger(__name__)
@@ -38,17 +38,37 @@ def _is_pdf(content: bytes) -> bool:
     return content[:4] == b"%PDF"
 
 
-def _is_xml(content: bytes) -> bool:
+def _parse_xml(content: bytes) -> ET.Element | None:
     stripped = content.lstrip()
+    if stripped.startswith(b"\xef\xbb\xbf"):
+        stripped = stripped[3:]
     if not stripped:
-        return False
+        return None
     if not stripped.startswith((b"<?xml", b"<")):
-        return False
+        return None
     try:
-        ET.fromstring(content)
+        return ET.fromstring(stripped)
     except ET.ParseError:
+        return None
+
+
+def _is_xml(content: bytes) -> bool:
+    return _parse_xml(content) is not None
+
+
+def _xml_local_name(tag: str) -> str:
+    if tag.startswith("{"):
+        return tag.split("}", 1)[1]
+    return tag.split(":", 1)[-1]
+
+
+def _is_elsevier_full_text_xml(content: bytes) -> bool:
+    root = _parse_xml(content)
+    if root is None:
         return False
-    return True
+    if _xml_local_name(root.tag) != "full-text-retrieval-response":
+        return False
+    return any(_xml_local_name(child.tag) == "coredata" for child in root.iter())
 
 
 def _normalize_doi(doi: Optional[str]) -> str | None:
@@ -193,6 +213,7 @@ async def _fetch_elsevier_xml_by_doi(
     doi: Optional[str],
 ) -> bytes | None:
     normalized = _normalize_doi(doi)
+    # Intentionally scoped: only the Elsevier DOI namespace used by this fallback.
     if not normalized or not normalized.startswith("10.1016/"):
         return None
 
@@ -213,7 +234,7 @@ async def _fetch_elsevier_xml_by_doi(
             return None
         response.raise_for_status()
         content = response.content
-        return content if _is_xml(content) else None
+        return content if _is_elsevier_full_text_xml(content) else None
     except Exception as exc:
         logger.debug("Elsevier DOI lookup failed for %s: %s", normalized, exc)
         return None
@@ -236,7 +257,7 @@ async def _recover_openalex_pdf_url(
 
 
 def _success_entry(
-    paper: Paper, rank: int, file_path: Path, content: bytes, source: str
+    paper: Paper, rank: int, file_path: Path, content: bytes, source: SourceUsed
 ) -> ManifestEntry:
     return ManifestEntry(
         paper_id=paper.paper_id,

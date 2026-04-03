@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
+SourceUsed = Literal["open_access_url", "arxiv", "elsevier_api"]
+
 
 class ManifestEntry(BaseModel):
     paper_id: str
@@ -12,7 +14,7 @@ class ManifestEntry(BaseModel):
     rank: int
     score: float
     status: Literal["success", "failed"]
-    source_used: Optional[Literal["open_access_url", "arxiv", "elsevier_api"]] = None
+    source_used: Optional[SourceUsed] = None
     file_path: Optional[str] = None
     file_size_kb: Optional[int] = None
     error: Optional[str] = None
