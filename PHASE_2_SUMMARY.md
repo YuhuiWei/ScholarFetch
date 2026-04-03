@@ -147,7 +147,7 @@ The resolver prefers `best_oa_location.url_for_pdf`, then other OA location URLs
 If OA sources fail and the DOI is an Elsevier DOI (`10.1016/...`), the downloader attempts:
 
 ```
-GET https://api.elsevier.com/content/article/doi/{normalized_doi}
+GET https://api.elsevier.com/content/article/doi/{normalized_doi}?view=FULL
 Headers:
   X-ELS-APIKey: <ELSEVIER_API_KEY>
   Accept: application/xml
