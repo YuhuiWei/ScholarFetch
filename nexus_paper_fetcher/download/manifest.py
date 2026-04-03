@@ -12,7 +12,7 @@ class ManifestEntry(BaseModel):
     rank: int
     score: float
     status: Literal["success", "failed"]
-    source_used: Optional[Literal["open_access_url", "arxiv"]] = None
+    source_used: Optional[Literal["open_access_url", "arxiv", "elsevier_api"]] = None
     file_path: Optional[str] = None
     file_size_kb: Optional[int] = None
     error: Optional[str] = None
