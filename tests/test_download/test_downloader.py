@@ -7,6 +7,10 @@ from nexus_paper_fetcher.models import Paper, ScoreBreakdown
 from nexus_paper_fetcher.download.downloader import resolve, _sanitize_title
 from tests.test_download.constants import FAKE_PDF, FAKE_HTML
 
+ELSEVIER_FULL_TEXT_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<full-text-retrieval-response><coredata><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Cell Paper</dc:title></coredata></full-text-retrieval-response>
+"""
+
 
 def _paper(**overrides) -> Paper:
     defaults = dict(
@@ -347,6 +351,101 @@ async def test_all_sources_fail(tmp_path):
     assert entry.status == "failed"
     assert entry.file_path is None
     assert entry.error is not None
+
+
+@respx.mock
+async def test_elsevier_full_text_xml_fallback(tmp_path, monkeypatch):
+    monkeypatch.setenv("ELSEVIER_API_KEY", "test-key")
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.1016/j.cell.2024.01.026").mock(
+        return_value=httpx.Response(404, json={})
+    )
+    elsevier_route = respx.get(
+        "https://api.elsevier.com/content/article/doi/10.1016/j.cell.2024.01.026"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            content=ELSEVIER_FULL_TEXT_RESPONSE.encode("utf-8"),
+            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
+        )
+    )
+    paper = _paper(
+        doi="10.1016/j.cell.2024.01.026",
+        open_access_pdf_url=None,
+        arxiv_id=None,
+    )
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=6, output_dir=tmp_path, session=client)
+    assert entry.status == "success"
+    assert elsevier_route.call_count == 1
+
+
+@respx.mock
+async def test_elsevier_skips_without_api_key(tmp_path, monkeypatch):
+    monkeypatch.delenv("ELSEVIER_API_KEY", raising=False)
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.1016/j.cell.2024.01.026").mock(
+        return_value=httpx.Response(404, json={})
+    )
+    elsevier_route = respx.get(
+        "https://api.elsevier.com/content/article/doi/10.1016/j.cell.2024.01.026"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            content=ELSEVIER_FULL_TEXT_RESPONSE.encode("utf-8"),
+            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
+        )
+    )
+    paper = _paper(
+        doi="10.1016/j.cell.2024.01.026",
+        open_access_pdf_url=None,
+        arxiv_id=None,
+    )
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=6, output_dir=tmp_path, session=client)
+    assert entry.status == "failed"
+    assert elsevier_route.call_count == 0
+
+
+@respx.mock
+async def test_non_elsevier_doi_does_not_call_elsevier(tmp_path, monkeypatch):
+    monkeypatch.setenv("ELSEVIER_API_KEY", "test-key")
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(404, json={})
+    )
+    elsevier_route = respx.get(
+        "https://api.elsevier.com/content/article/doi/10.5555/test.paper"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            content=ELSEVIER_FULL_TEXT_RESPONSE.encode("utf-8"),
+            headers={"Content-Type": "application/xml", "Accept": "application/xml"},
+        )
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=7, output_dir=tmp_path, session=client)
+    assert entry.status == "failed"
+    assert elsevier_route.call_count == 0
 
 
 def test_resolve_signature_has_no_ezproxy_controls():
