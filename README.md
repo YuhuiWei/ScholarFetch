@@ -1,6 +1,6 @@
 # nexus-paper-fetcher
 
-Ranked academic paper search and PDF download pipeline for the NEXUS multi-agent research platform. Fetches candidates from OpenAlex, Semantic Scholar, and OpenReview, deduplicates and scores them, then downloads full-text PDFs for downstream extraction.
+Ranked academic paper search and full-text download pipeline for the NEXUS multi-agent research platform. Fetches candidates from OpenAlex, Semantic Scholar, and OpenReview, deduplicates and scores them, then downloads full-text files for downstream extraction.
 
 ---
 
@@ -8,8 +8,8 @@ Ranked academic paper search and PDF download pipeline for the NEXUS multi-agent
 
 ```
 Phase 1: nexus fetch  →  ranked JSON  (OpenAlex + S2 + OpenReview)
-Phase 2: nexus download  →  PDFs + manifest.json
-Phase 3: (coming) parse PDFs, extract knowledge via OpenAI
+Phase 2: nexus download  →  downloaded files + manifest.json
+Phase 3: (coming) parse downloaded files, extract knowledge via OpenAI
 Phase 4: (coming) generate NEXUS agent skills
 ```
 
@@ -30,7 +30,10 @@ export S2_API_KEY=...
 # For OpenAlex polite pool
 export NEXUS_EMAIL=you@institution.edu
 
-# Default output directory for downloaded PDFs
+# Preferred default output directory for downloaded files
+export NEXUS_DOWNLOAD_DIR=/path/to/papers
+
+# Legacy fallback (still supported)
 export NEXUS_PDF_DIR=/path/to/papers
 ```
 
@@ -92,9 +95,9 @@ Papers are ranked by a composite score with domain-aware weights:
 
 ---
 
-## Phase 2: PDF Download
+## Phase 2: Full-Text Download
 
-Download full-text PDFs for ranked papers. Reads Phase 1 JSON output, resolves PDFs from multiple sources, and writes a crash-safe manifest.
+Download full-text files for ranked papers. Reads Phase 1 JSON output, resolves content from multiple sources, and writes a crash-safe manifest.
 
 ```bash
 # Download all papers from a results file
@@ -107,7 +110,7 @@ nexus download results/papers.json --output-dir /data/papers
 nexus download results/papers.json --top 10
 ```
 
-**Default output directory:** `$NEXUS_PDF_DIR`, or `./papers` if unset.
+**Default output directory:** `$NEXUS_DOWNLOAD_DIR`, else legacy `$NEXUS_PDF_DIR`, else `./papers`.
 
 ### Resolution order
 
@@ -117,8 +120,11 @@ For each paper, sources are tried in sequence:
 2. OpenAlex OA recovery from `openalex_id`
 3. arXiv lookup by DOI
 4. Unpaywall lookup by DOI (`NEXUS_UNPAYWALL_EMAIL`, default `weiy@ohsu`)
+5. Elsevier full-text XML lookup by DOI (`ELSEVIER_API_KEY`, Elsevier DOI prefix `10.1016/`)
 
-All downloads are validated — HTML error pages are rejected and the next source is tried.
+Downloads are validated before saving. HTML error pages are rejected for PDF sources, and the Elsevier fallback requires a valid full-text XML response.
+Successful Elsevier subscription downloads are saved as `.xml` with `source_used: "elsevier_api"`.
+The output directory may contain a mix of `.pdf` and `.xml` files.
 
 ### Manifest
 
@@ -174,16 +180,18 @@ pytest -m integration           # real API tests (requires keys)
 | `OPENAI_API_KEY` | 1 | NLP parsing, relevance scoring, methodology classification |
 | `S2_API_KEY` | 1 | Semantic Scholar higher rate limits |
 | `NEXUS_EMAIL` | 1 | OpenAlex polite pool email |
-| `NEXUS_PDF_DIR` | 2 | Default PDF output directory (falls back to `./papers`) |
+| `NEXUS_DOWNLOAD_DIR` | 2 | Preferred default output directory for downloaded files |
+| `NEXUS_PDF_DIR` | 2 | Legacy fallback output directory when `NEXUS_DOWNLOAD_DIR` is unset |
 | `NEXUS_UNPAYWALL_EMAIL` | 2 | Email used for Unpaywall API requests (defaults to `weiy@ohsu`) |
+| `ELSEVIER_API_KEY` | 2 | Required to enable Elsevier subscription XML fallback for `10.1016/...` DOIs |
 
 ---
 
 ## Changelog
 
-### v0.2.0 — Phase 2: PDF Download
+### v0.2.0 — Phase 2: Full-Text Download
 - `nexus download` CLI command
-- 4-step OA resolver: saved URL → OpenAlex recovery → DOI arXiv → DOI Unpaywall
+- 5-step resolver: saved OA URL → OpenAlex recovery → DOI arXiv → DOI Unpaywall → DOI Elsevier XML
 - Atomic crash-safe manifest (`manifest.json`) with idempotent re-runs
 - `asyncio.Semaphore(3)` rate-limited concurrent downloads
 - `SearchQuery` extended: `keyword_count`, `venue_preferences`, `weight_preferences`, `publication_categories`, `keyword_logic`, `paper_titles`

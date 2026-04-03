@@ -1,10 +1,10 @@
-# Phase 2: PDF Download Pipeline — Implementation Summary
+# Phase 2: Full-Text Download Pipeline — Implementation Summary
 
 ## Overview
 
-Phase 2 extends `nexus-paper-fetcher` with a full PDF download pipeline. It reads the ranked JSON output from Phase 1, resolves and downloads PDFs from multiple sources, writes each result to a crash-safe manifest, and exposes a `nexus download` CLI command.
+Phase 2 extends `nexus-paper-fetcher` with a full download pipeline. It reads the ranked JSON output from Phase 1, resolves and downloads full-text files from multiple sources, writes each result to a crash-safe manifest, and exposes a `nexus download` CLI command.
 
-Phase 3 reads `manifest.json` to discover which PDFs are available for extraction.
+Phase 3 reads `manifest.json` to discover which downloaded files are available for extraction.
 
 ---
 
@@ -14,7 +14,7 @@ Phase 3 reads `manifest.json` to discover which PDFs are available for extractio
 # Download all papers from a Phase 1 results file
 nexus download results/2026-04-01_attention_top20.json
 
-# Save PDFs to a custom directory
+# Save downloaded files to a custom directory
 nexus download results/papers.json --output-dir /data/papers
 
 # Download only the top 10 ranked papers
@@ -24,7 +24,7 @@ nexus download results/papers.json --top 10
 nexus download results/papers.json --output-dir /data/papers --top 10
 ```
 
-**Default output directory:** `$NEXUS_PDF_DIR` env var, or `./papers` if unset.
+**Default output directory:** `$NEXUS_DOWNLOAD_DIR`, else legacy `$NEXUS_PDF_DIR`, else `./papers`.
 
 **Progress output** (stderr):
 
@@ -49,8 +49,9 @@ For each paper, sources are tried in sequence; the first successful download win
 | 2 | OpenAlex OA recovery from `openalex_id` | `openalex_id` field is non-empty |
 | 3 | arXiv lookup by DOI | `doi` field is non-empty and arXiv DOI match succeeds |
 | 4 | Unpaywall lookup by DOI | `doi` field is non-empty |
+| 5 | Elsevier full-text XML by DOI | `doi` starts with `10.1016/` and `ELSEVIER_API_KEY` is set |
 
-All sources validate that the downloaded content starts with `%PDF` — HTML error pages are silently rejected and the next source is tried.
+PDF-oriented sources validate that downloaded content starts with `%PDF`; HTML error pages are silently rejected and the next source is tried. The Elsevier fallback validates full-text XML response structure before saving.
 
 ---
 
@@ -98,9 +99,9 @@ Each paper's download result is recorded in `manifest.json` in the output direct
 | `rank` | `int` | Rank from Phase 1 scoring (1 = best) |
 | `score` | `float` | Composite score from Phase 1 |
 | `status` | `"success" \| "failed"` | Download outcome |
-| `source_used` | `"open_access_url" \| "arxiv" \| null` | Which source succeeded |
-| `file_path` | `str \| null` | Absolute path to saved PDF |
-| `file_size_kb` | `int \| null` | PDF size in KB |
+| `source_used` | `"open_access_url" \| "arxiv" \| "elsevier_api" \| null` | Which source succeeded |
+| `file_path` | `str \| null` | Absolute path to saved file (`.pdf` or `.xml`) |
+| `file_size_kb` | `int \| null` | File size in KB |
 | `error` | `str \| null` | Error message on failure |
 
 ### Crash-safety
@@ -114,11 +115,12 @@ Re-running `nexus download` on the same results file skips any paper whose `pape
 ### File naming
 
 ```
-rank_{rank:02d}_{first_6_words_of_title}.pdf
+rank_{rank:02d}_{first_6_words_of_title}.{pdf|xml}
 
 Examples:
   rank_01_attention_is_all_you_need.pdf
   rank_02_bert_pre_training_of_deep.pdf
+  rank_03_cell_xyz.xml
 ```
 
 ---
@@ -140,6 +142,26 @@ The resolver prefers `best_oa_location.url_for_pdf`, then other OA location URLs
 
 ---
 
+## Elsevier Subscription XML Fallback
+
+If OA sources fail and the DOI is an Elsevier DOI (`10.1016/...`), the downloader attempts:
+
+```
+GET https://api.elsevier.com/content/article/doi/{normalized_doi}
+Headers:
+  X-ELS-APIKey: <ELSEVIER_API_KEY>
+  Accept: application/xml
+```
+
+Notes:
+
+- `ELSEVIER_API_KEY` is required for this fallback.
+- Successful responses are saved as `.xml`.
+- Manifest entries for these successes use `source_used: "elsevier_api"`.
+- Output directories can contain a mix of `.pdf` and `.xml` files.
+
+---
+
 ## Concurrency
 
 Downloads run with `asyncio` and a `Semaphore(3)` — at most 3 papers download concurrently. A single shared `httpx.AsyncClient` is reused across concurrent requests.
@@ -155,7 +177,7 @@ nexus_paper_fetcher/download/
   __init__.py          empty package marker
   manifest.py          ManifestEntry / Manifest Pydantic models; atomic load/save
   ezproxy.py           Legacy module (not used in active resolver order)
-  downloader.py        resolve() — OA URL -> OpenAlex -> DOI arXiv -> DOI Unpaywall
+  downloader.py        resolve() — OA URL -> OpenAlex -> DOI arXiv -> DOI Unpaywall -> DOI Elsevier XML
   pipeline.py          run_download() — batch orchestration, Semaphore(3)
   cli.py               download_command() registered as `nexus download`
 
@@ -163,8 +185,8 @@ tests/test_download/
   constants.py         shared FAKE_PDF / FAKE_HTML bytes
   test_manifest.py     7 tests
   test_ezproxy.py      6 tests
-  test_downloader.py   13 tests
-  test_pipeline.py     7 tests
+  test_downloader.py   downloader source fallthrough tests (including Elsevier XML fallback)
+  test_pipeline.py     batch download + manifest behavior tests
 ```
 
 ---
@@ -173,8 +195,10 @@ tests/test_download/
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXUS_PDF_DIR` | No | Default output directory (falls back to `./papers`) |
+| `NEXUS_DOWNLOAD_DIR` | No | Preferred default output directory for downloaded files |
+| `NEXUS_PDF_DIR` | No | Legacy fallback output directory when `NEXUS_DOWNLOAD_DIR` is unset |
 | `NEXUS_UNPAYWALL_EMAIL` | No | Email used for Unpaywall API requests (default: `weiy@ohsu`) |
+| `ELSEVIER_API_KEY` | No | Required to enable Elsevier subscription XML fallback |
 
 ---
 
