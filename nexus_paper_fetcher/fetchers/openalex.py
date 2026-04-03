@@ -19,6 +19,26 @@ def _reconstruct_abstract(inv_index: dict) -> str:
     return " ".join(slots[i] for i in sorted(slots))
 
 
+def extract_open_access_pdf_url(work: dict) -> Optional[str]:
+    best_oa_location = work.get("best_oa_location") or {}
+    if isinstance(best_oa_location, dict):
+        pdf_url = best_oa_location.get("pdf_url")
+        if pdf_url:
+            return pdf_url
+
+    open_access = work.get("open_access") or {}
+    if isinstance(open_access, dict):
+        oa_url = open_access.get("oa_url")
+        if oa_url:
+            return oa_url
+
+    for location in work.get("locations") or []:
+        if isinstance(location, dict) and location.get("pdf_url"):
+            return location["pdf_url"]
+
+    return None
+
+
 def _work_to_paper(work: dict) -> Optional[Paper]:
     title = work.get("title")
     if not title:
@@ -53,6 +73,7 @@ def _work_to_paper(work: dict) -> Optional[Paper]:
         abstract=abstract,
         citation_count=work.get("cited_by_count"),
         openalex_id=openalex_id,
+        open_access_pdf_url=extract_open_access_pdf_url(work),
         sources=["openalex"],
     )
 

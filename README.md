@@ -30,10 +30,6 @@ export S2_API_KEY=...
 # For OpenAlex polite pool
 export NEXUS_EMAIL=you@institution.edu
 
-# For PDF downloads via OHSU institutional proxy
-export OHSU_USERNAME=your_ohsu_id
-export OHSU_PASSWORD=your_password
-
 # Default output directory for downloaded PDFs
 export NEXUS_PDF_DIR=/path/to/papers
 ```
@@ -109,9 +105,6 @@ nexus download results/papers.json --output-dir /data/papers
 
 # Download only top 10
 nexus download results/papers.json --top 10
-
-# Skip OHSU institutional proxy (free sources only)
-nexus download results/papers.json --skip-ezproxy
 ```
 
 **Default output directory:** `$NEXUS_PDF_DIR`, or `./papers` if unset.
@@ -121,8 +114,9 @@ nexus download results/papers.json --skip-ezproxy
 For each paper, sources are tried in sequence:
 
 1. `open_access_pdf_url` from Phase 1 metadata (direct download)
-2. `https://arxiv.org/pdf/{arxiv_id}.pdf` (always free)
-3. DOI via OHSU EZProxy (requires `OHSU_USERNAME` / `OHSU_PASSWORD`)
+2. OpenAlex OA recovery from `openalex_id`
+3. arXiv lookup by DOI
+4. Unpaywall lookup by DOI (`NEXUS_UNPAYWALL_EMAIL`, default `weiy@ohsu`)
 
 All downloads are validated — HTML error pages are rejected and the next source is tried.
 
@@ -149,14 +143,6 @@ Every download result is recorded in `manifest.json` in the output directory:
 ```
 
 The manifest is written atomically after each paper — safe under SLURM preemption. Re-running skips papers already marked `"success"`.
-
-### OHSU EZProxy
-
-When `OHSU_USERNAME` and `OHSU_PASSWORD` are set, Phase 2 authenticates once at the start of the batch and reuses the session cookie for all paywalled DOI lookups. If credentials are missing or auth fails, only free sources are used.
-
-See [PHASE_2_SUMMARY.md](PHASE_2_SUMMARY.md) for full details.
-
----
 
 ## Running Tests
 
@@ -189,8 +175,7 @@ pytest -m integration           # real API tests (requires keys)
 | `S2_API_KEY` | 1 | Semantic Scholar higher rate limits |
 | `NEXUS_EMAIL` | 1 | OpenAlex polite pool email |
 | `NEXUS_PDF_DIR` | 2 | Default PDF output directory (falls back to `./papers`) |
-| `OHSU_USERNAME` | 2 | OHSU EZProxy username |
-| `OHSU_PASSWORD` | 2 | OHSU EZProxy password |
+| `NEXUS_UNPAYWALL_EMAIL` | 2 | Email used for Unpaywall API requests (defaults to `weiy@ohsu`) |
 
 ---
 
@@ -198,9 +183,8 @@ pytest -m integration           # real API tests (requires keys)
 
 ### v0.2.0 — Phase 2: PDF Download
 - `nexus download` CLI command
-- 3-source PDF resolver: open access → arXiv → OHSU EZProxy
+- 4-step OA resolver: saved URL → OpenAlex recovery → DOI arXiv → DOI Unpaywall
 - Atomic crash-safe manifest (`manifest.json`) with idempotent re-runs
-- OHSU EZProxy session auth with cookie reuse across batch
 - `asyncio.Semaphore(3)` rate-limited concurrent downloads
 - `SearchQuery` extended: `keyword_count`, `venue_preferences`, `weight_preferences`, `publication_categories`, `keyword_logic`, `paper_titles`
 - `Paper` extended: `methodology_category`, `publication_type`, `keywords`

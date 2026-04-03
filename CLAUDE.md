@@ -33,4 +33,4 @@ nexus fetch "attention mechanisms" --top-n 50 --domain-category cs_ml --year-fro
 - RelevanceScorer defaults to 0.5 when OPENAI_API_KEY unset
 - All fetchers return [] on failure, never raise
 - Output: envelope JSON {run: {...}, papers: [...]} in results/
-- Phase 2 reads paper.doi, paper.arxiv_id, paper.open_access_pdf_url to resolve PDFs
+- Phase 2 PDF order: saved `open_access_pdf_url` -> OpenAlex `openalex_id` recovery -> DOI arXiv -> DOI Unpaywall

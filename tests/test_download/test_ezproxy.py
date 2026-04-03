@@ -5,6 +5,8 @@ import respx
 from nexus_paper_fetcher.download.ezproxy import EZProxySession, EZPROXY_LOGIN_URL
 from tests.test_download.constants import FAKE_PDF, FAKE_HTML
 
+pytestmark = pytest.mark.skip(reason="EZproxy no longer participates in active download resolution.")
+
 
 @pytest.fixture
 def with_credentials(monkeypatch):

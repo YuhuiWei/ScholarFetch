@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from pathlib import Path
 from nexus_paper_fetcher.download.manifest import (
     Manifest, ManifestEntry, load_manifest, save_manifest,
@@ -69,3 +70,30 @@ def test_atomic_write_no_tmp_left(tmp_path):
     save_manifest(Manifest(entries=[_entry("abc")]), path)
     assert path.exists()
     assert not (tmp_path / "manifest.json.tmp").exists()
+
+
+def test_load_legacy_manifest_ezproxy_source_normalized(tmp_path):
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "paper_id": "legacy1",
+                        "title": "Legacy Paper",
+                        "rank": 1,
+                        "score": 0.8,
+                        "status": "success",
+                        "source_used": "ezproxy",
+                        "file_path": "/papers/legacy1.pdf",
+                        "file_size_kb": 123,
+                        "error": None,
+                    }
+                ]
+            }
+        )
+    )
+    manifest = load_manifest(path)
+    assert len(manifest.entries) == 1
+    assert manifest.entries[0].status == "success"
+    assert manifest.entries[0].source_used == "open_access_url"

@@ -8,7 +8,6 @@ from typing import Optional
 import httpx
 from nexus_paper_fetcher.models import RunResult
 from nexus_paper_fetcher.download.manifest import Manifest, load_manifest, save_manifest
-from nexus_paper_fetcher.download.ezproxy import EZProxySession
 from nexus_paper_fetcher.download.downloader import resolve, ManifestEntry
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,6 @@ async def run_download(
     results_path: Path,
     output_dir: Path,
     top_n: Optional[int] = None,
-    skip_ezproxy: bool = False,
 ) -> Manifest:
     with open(results_path) as f:
         run_result = RunResult.model_validate(json.load(f))
@@ -47,16 +45,6 @@ async def run_download(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        ezproxy: Optional[EZProxySession] = None
-        if not skip_ezproxy:
-            ez = EZProxySession(client)
-            if await ez.authenticate():
-                _err("[nexus-dl] EZproxy auth ok")
-                ezproxy = ez
-            else:
-                _err("[nexus-dl] EZproxy auth failed  (free sources only)")
-                skip_ezproxy = True
-
         _err(
             f"[nexus-dl] downloading {len(to_download)} papers "
             f"(max {_CONCURRENCY} concurrent)..."
@@ -70,8 +58,6 @@ async def run_download(
                     rank=rank,
                     output_dir=output_dir,
                     session=client,
-                    ezproxy=ezproxy,
-                    skip_ezproxy=skip_ezproxy,
                 )
                 # upsert + save are both synchronous (no await between them), so
                 # they cannot be interleaved by the asyncio event loop even with

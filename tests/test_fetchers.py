@@ -61,6 +61,12 @@ OPENALEX_RESPONSE = {
             "doi": "https://doi.org/10.1038/nmeth.001",
             "publication_year": 2023,
             "cited_by_count": 300,
+            "best_oa_location": {
+                "pdf_url": "https://example.com/openalex-paper.pdf",
+            },
+            "open_access": {
+                "oa_url": "https://example.com/openalex-paper.pdf",
+            },
             "abstract_inverted_index": {"Single": [0], "cell": [1], "method": [2]},
             "authorships": [{"author": {"display_name": "Smith, J."}}],
             "primary_location": {"source": {"display_name": "Nature Methods"}},
@@ -101,6 +107,7 @@ async def test_openalex_fetcher_parses_papers():
     assert papers[0].doi == "10.1038/nmeth.001"
     assert papers[0].abstract == "Single cell method"
     assert papers[0].openalex_id == "W123"
+    assert papers[0].open_access_pdf_url == "https://example.com/openalex-paper.pdf"
     assert papers[0].citation_count == 300
     assert "openalex" in papers[0].sources
 

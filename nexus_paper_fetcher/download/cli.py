@@ -17,9 +17,6 @@ def download_command(
         _DEFAULT_OUTPUT_DIR, "--output-dir", help="Directory to save PDFs"
     ),
     top: Optional[int] = typer.Option(None, "--top", help="Download only top N papers"),
-    skip_ezproxy: bool = typer.Option(
-        False, "--skip-ezproxy", help="Only use free sources (skip OHSU EZproxy)"
-    ),
 ) -> None:
     if not results_file.exists():
         print(f"[nexus-dl] error: file not found: {results_file}", file=sys.stderr)
@@ -30,7 +27,6 @@ def download_command(
             results_path=results_file,
             output_dir=output_dir,
             top_n=top,
-            skip_ezproxy=skip_ezproxy,
         )
 
     asyncio.run(_run())

@@ -1,12 +1,10 @@
 from __future__ import annotations
+import inspect
 from pathlib import Path
-from unittest.mock import AsyncMock
 import httpx
-import pytest
 import respx
 from nexus_paper_fetcher.models import Paper, ScoreBreakdown
 from nexus_paper_fetcher.download.downloader import resolve, _sanitize_title
-from nexus_paper_fetcher.download.ezproxy import EZProxySession
 from tests.test_download.constants import FAKE_PDF, FAKE_HTML
 
 
@@ -61,11 +59,24 @@ async def test_source1_open_access_url_success(tmp_path):
 
 
 @respx.mock
-async def test_source1_html_falls_through_to_arxiv(tmp_path):
+async def test_source1_html_falls_through_to_doi_arxiv(tmp_path):
     respx.get("https://example.com/paper.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_HTML)
     )
-    respx.get("https://arxiv.org/pdf/1706.03762.pdf").mock(
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/1706.03762v7</id>
+    <arxiv:doi>10.5555/test.paper</arxiv:doi>
+  </entry>
+</feed>""",
+        )
+    )
+    respx.get("https://arxiv.org/pdf/1706.03762v7.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
     async with httpx.AsyncClient() as client:
@@ -75,28 +86,244 @@ async def test_source1_html_falls_through_to_arxiv(tmp_path):
 
 
 @respx.mock
-async def test_source2_arxiv_only(tmp_path):
-    respx.get("https://arxiv.org/pdf/1706.03762.pdf").mock(
+async def test_doi_resolves_to_arxiv_pdf(tmp_path):
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/1706.03762v7</id>
+    <arxiv:doi>10.5555/test.paper</arxiv:doi>
+  </entry>
+</feed>""",
+        )
+    )
+    respx.get("https://arxiv.org/pdf/1706.03762v7.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
-    paper = _paper(open_access_pdf_url=None)
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
     async with httpx.AsyncClient() as client:
         entry = await resolve(paper, rank=2, output_dir=tmp_path, session=client)
     assert entry.status == "success"
     assert entry.source_used == "arxiv"
 
 
-async def test_source3_ezproxy_fallback(tmp_path):
-    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
-    mock_ez = AsyncMock(spec=EZProxySession)
-    mock_ez.get_pdf.return_value = FAKE_PDF
-    async with httpx.AsyncClient() as client:
-        entry = await resolve(
-            paper, rank=3, output_dir=tmp_path, session=client, ezproxy=mock_ez
+@respx.mock
+async def test_openalex_metadata_fallback_recovers_open_access_pdf(tmp_path):
+    respx.get("https://api.openalex.org/works/W123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "best_oa_location": {
+                    "pdf_url": "https://example.com/from-openalex.pdf",
+                }
+            },
         )
+    )
+    respx.get("https://example.com/from-openalex.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None, openalex_id="W123")
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=2, output_dir=tmp_path, session=client)
     assert entry.status == "success"
-    assert entry.source_used == "ezproxy"
-    mock_ez.get_pdf.assert_called_once_with("10.5555/test.paper")
+    assert entry.source_used == "open_access_url"
+
+
+@respx.mock
+async def test_openalex_recovery_runs_after_saved_oa_url_fails(tmp_path):
+    respx.get("https://example.com/paper.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_HTML)
+    )
+    respx.get("https://api.openalex.org/works/W123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "best_oa_location": {
+                    "pdf_url": "https://example.com/from-openalex.pdf",
+                }
+            },
+        )
+    )
+    respx.get("https://example.com/from-openalex.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    paper = _paper(openalex_id="W123")
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client)
+    assert entry.status == "success"
+    assert entry.source_used == "open_access_url"
+
+
+@respx.mock
+async def test_openalex_metadata_fallback_uses_browser_headers_for_pdf_requests(tmp_path):
+    respx.get("https://api.openalex.org/works/W123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "best_oa_location": {
+                    "pdf_url": "https://example.com/from-openalex.pdf",
+                }
+            },
+        )
+    )
+    respx.get("https://example.com/from-openalex.pdf").mock(
+        side_effect=lambda request: httpx.Response(
+            200 if request.headers.get("user-agent", "").startswith("Mozilla/5.0") else 418,
+            content=FAKE_PDF if request.headers.get("user-agent", "").startswith("Mozilla/5.0") else FAKE_HTML,
+        )
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None, openalex_id="W123")
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=2, output_dir=tmp_path, session=client)
+    assert entry.status == "success"
+    assert entry.source_used == "open_access_url"
+
+
+@respx.mock
+async def test_doi_mismatch_misses_arxiv(tmp_path):
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/1706.03762v7</id>
+    <arxiv:doi>10.0000/not-a-match</arxiv:doi>
+  </entry>
+</feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(404, json={})
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=3, output_dir=tmp_path, session=client)
+    assert entry.status == "failed"
+
+
+@respx.mock
+async def test_doi_resolves_through_unpaywall_pdf(tmp_path):
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "best_oa_location": {
+                    "url_for_pdf": "https://example.com/unpaywall.pdf",
+                }
+            },
+        )
+    )
+    respx.get("https://example.com/unpaywall.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client)
+    assert entry.status == "success"
+    assert entry.source_used == "open_access_url"
+
+
+@respx.mock
+async def test_doi_unpaywall_uses_env_configured_email(tmp_path, monkeypatch):
+    monkeypatch.setenv("NEXUS_UNPAYWALL_EMAIL", "custom@example.edu")
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        side_effect=lambda request: httpx.Response(
+            200 if request.url.params.get("email") == "custom@example.edu" else 400,
+            json={
+                "best_oa_location": {
+                    "url_for_pdf": "https://example.com/unpaywall.pdf",
+                }
+            },
+        )
+    )
+    respx.get("https://example.com/unpaywall.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client)
+    assert entry.status == "success"
+    assert entry.source_used == "open_access_url"
+
+
+@respx.mock
+async def test_doi_unpaywall_landing_page_non_pdf_soft_fails(tmp_path):
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "best_oa_location": {
+                    "url": "https://example.com/landing-page",
+                }
+            },
+        )
+    )
+    respx.get("https://example.com/landing-page").mock(
+        return_value=httpx.Response(200, content=FAKE_HTML)
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client)
+    assert entry.status == "failed"
+    assert entry.file_path is None
+
+
+@respx.mock
+async def test_doi_arxiv_malformed_xml_soft_fails(tmp_path):
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(200, text="<feed><entry>")
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(404, json={})
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client)
+    assert entry.status == "failed"
+
+
+@respx.mock
+async def test_doi_unpaywall_invalid_json_soft_fails(tmp_path):
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(200, text="not-json")
+    )
+    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
+    async with httpx.AsyncClient() as client:
+        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client)
+    assert entry.status == "failed"
 
 
 @respx.mock
@@ -104,24 +331,28 @@ async def test_all_sources_fail(tmp_path):
     respx.get("https://example.com/paper.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_HTML)
     )
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(404, json={})
+    )
     paper = _paper(arxiv_id=None)
     async with httpx.AsyncClient() as client:
-        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client, skip_ezproxy=True)
+        entry = await resolve(paper, rank=1, output_dir=tmp_path, session=client)
     assert entry.status == "failed"
     assert entry.file_path is None
     assert entry.error is not None
 
 
-async def test_skip_ezproxy_never_calls_get_pdf(tmp_path):
-    paper = _paper(open_access_pdf_url=None, arxiv_id=None)
-    mock_ez = AsyncMock(spec=EZProxySession)
-    async with httpx.AsyncClient() as client:
-        entry = await resolve(
-            paper, rank=1, output_dir=tmp_path, session=client,
-            ezproxy=mock_ez, skip_ezproxy=True,
-        )
-    assert entry.status == "failed"
-    mock_ez.get_pdf.assert_not_called()
+def test_resolve_signature_has_no_ezproxy_controls():
+    params = inspect.signature(resolve).parameters
+    assert "ezproxy" not in params
+    assert "skip_ezproxy" not in params
 
 
 @respx.mock
@@ -130,11 +361,37 @@ async def test_pdf_validation_rejects_html(tmp_path):
     respx.get("https://example.com/paper.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_HTML)
     )
-    respx.get("https://arxiv.org/pdf/1706.03762.pdf").mock(
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/1706.03762v7</id>
+    <arxiv:doi>10.5555/test.paper</arxiv:doi>
+  </entry>
+</feed>""",
+        )
+    )
+    respx.get("https://arxiv.org/pdf/1706.03762v7.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_HTML)
+    )
+    respx.get("https://api.unpaywall.org/v2/10.5555/test.paper").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "best_oa_location": {
+                    "url_for_pdf": "https://example.com/unpaywall.pdf",
+                }
+            },
+        )
+    )
+    respx.get("https://example.com/unpaywall.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_HTML)
     )
     async with httpx.AsyncClient() as client:
-        entry = await resolve(_paper(), rank=1, output_dir=tmp_path, session=client, skip_ezproxy=True)
+        entry = await resolve(_paper(), rank=1, output_dir=tmp_path, session=client)
     assert entry.status == "failed"
     assert not any(tmp_path.iterdir())  # no file written
 

@@ -20,11 +20,8 @@ nexus download results/papers.json --output-dir /data/papers
 # Download only the top 10 ranked papers
 nexus download results/papers.json --top 10
 
-# Skip institutional proxy (free sources only)
-nexus download results/papers.json --skip-ezproxy
-
 # Combined
-nexus download results/papers.json --output-dir /data/papers --top 10 --skip-ezproxy
+nexus download results/papers.json --output-dir /data/papers --top 10
 ```
 
 **Default output directory:** `$NEXUS_PDF_DIR` env var, or `./papers` if unset.
@@ -33,7 +30,6 @@ nexus download results/papers.json --output-dir /data/papers --top 10 --skip-ezp
 
 ```
 [nexus-dl] loading results/papers.json  ->  20 papers (3 already downloaded)
-[nexus-dl] EZproxy auth ok
 [nexus-dl] downloading 17 papers (max 3 concurrent)...
 [nexus-dl]   rank_01  ok  open_access_url      ( 412 KB)  rank_01_attention_is_all_you_need.pdf
 [nexus-dl]   rank_02  ok  arxiv                ( 891 KB)  rank_02_bert_pre_training_of_deep.pdf
@@ -50,8 +46,9 @@ For each paper, sources are tried in sequence; the first successful download win
 | Priority | Source | Condition |
 |----------|--------|-----------|
 | 1 | `open_access_pdf_url` from Phase 1 JSON | Field is non-empty |
-| 2 | `https://arxiv.org/pdf/{arxiv_id}.pdf` | `arxiv_id` field is non-empty |
-| 3 | DOI via OHSU EZProxy | `doi` field is non-empty, EZProxy auth succeeded |
+| 2 | OpenAlex OA recovery from `openalex_id` | `openalex_id` field is non-empty |
+| 3 | arXiv lookup by DOI | `doi` field is non-empty and arXiv DOI match succeeds |
+| 4 | Unpaywall lookup by DOI | `doi` field is non-empty |
 
 All sources validate that the downloaded content starts with `%PDF` — HTML error pages are silently rejected and the next source is tried.
 
@@ -101,7 +98,7 @@ Each paper's download result is recorded in `manifest.json` in the output direct
 | `rank` | `int` | Rank from Phase 1 scoring (1 = best) |
 | `score` | `float` | Composite score from Phase 1 |
 | `status` | `"success" \| "failed"` | Download outcome |
-| `source_used` | `"open_access_url" \| "arxiv" \| "ezproxy" \| null` | Which source succeeded |
+| `source_used` | `"open_access_url" \| "arxiv" \| null` | Which source succeeded |
 | `file_path` | `str \| null` | Absolute path to saved PDF |
 | `file_size_kb` | `int \| null` | PDF size in KB |
 | `error` | `str \| null` | Error message on failure |
@@ -126,46 +123,26 @@ Examples:
 
 ---
 
-## OHSU EZProxy Integration
+## Unpaywall Integration
 
-EZProxy provides authenticated access to paywalled publisher PDFs via the OHSU library proxy.
-
-### Authentication
+For DOI fallback, the downloader queries:
 
 ```
-POST https://login.liboff.ohsu.edu/login
-  user=<OHSU_USERNAME>
-  pass=<OHSU_PASSWORD>
+GET https://api.unpaywall.org/v2/{normalized_doi}?email=<email>
 ```
 
-A **302 redirect** response indicates successful authentication. The session cookie is set automatically on the shared `httpx.AsyncClient` and reused for all subsequent EZProxy requests within the batch (valid for ~2 hours).
+Email resolution is runtime-configurable:
 
-A **200 response** (HTML login page) indicates bad credentials — EZProxy auth is disabled for the run and only free sources are used.
+1. `NEXUS_UNPAYWALL_EMAIL` environment variable
+2. fallback default `weiy@ohsu`
 
-### PDF retrieval via EZProxy
-
-```
-GET https://login.liboff.ohsu.edu/login?url=https://doi.org/{doi}
-```
-
-EZProxy rewrites the DOI URL through the institutional proxy. If the publisher returns a PDF, it is validated (`%PDF` magic bytes) and saved. If the publisher returns an HTML page (paywall, access denied), the download is recorded as failed.
-
-### Credentials
-
-Set in `~/.bashrc` (never hardcoded):
-
-```bash
-export OHSU_USERNAME=your_ohsu_id
-export OHSU_PASSWORD=your_password
-```
-
-If either variable is unset, EZProxy auth is skipped automatically and only open-access sources are tried.
+The resolver prefers `best_oa_location.url_for_pdf`, then other OA location URLs, and still validates final content as PDF bytes before saving.
 
 ---
 
 ## Concurrency
 
-Downloads run with `asyncio` and a `Semaphore(3)` — at most 3 papers download concurrently. A single shared `httpx.AsyncClient` carries the EZProxy session cookie across all concurrent requests.
+Downloads run with `asyncio` and a `Semaphore(3)` — at most 3 papers download concurrently. A single shared `httpx.AsyncClient` is reused across concurrent requests.
 
 The manifest upsert + atomic save are both synchronous (no `await` between them), so they cannot be interleaved by the event loop even under concurrent execution — no lock needed.
 
@@ -177,8 +154,8 @@ The manifest upsert + atomic save are both synchronous (no `await` between them)
 nexus_paper_fetcher/download/
   __init__.py          empty package marker
   manifest.py          ManifestEntry / Manifest Pydantic models; atomic load/save
-  ezproxy.py           EZProxySession: authenticate() + get_pdf()
-  downloader.py        resolve() — 3-source fallthrough per paper
+  ezproxy.py           Legacy module (not used in active resolver order)
+  downloader.py        resolve() — OA URL -> OpenAlex -> DOI arXiv -> DOI Unpaywall
   pipeline.py          run_download() — batch orchestration, Semaphore(3)
   cli.py               download_command() registered as `nexus download`
 
@@ -197,8 +174,7 @@ tests/test_download/
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `NEXUS_PDF_DIR` | No | Default output directory (falls back to `./papers`) |
-| `OHSU_USERNAME` | No | OHSU EZProxy username |
-| `OHSU_PASSWORD` | No | OHSU EZProxy password |
+| `NEXUS_UNPAYWALL_EMAIL` | No | Email used for Unpaywall API requests (default: `weiy@ohsu`) |
 
 ---
 
