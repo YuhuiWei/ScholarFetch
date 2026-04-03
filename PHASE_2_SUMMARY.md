@@ -100,7 +100,7 @@ Each paper's download result is recorded in `manifest.json` in the output direct
 | `score` | `float` | Composite score from Phase 1 |
 | `status` | `"success" \| "failed"` | Download outcome |
 | `source_used` | `"open_access_url" \| "arxiv" \| "elsevier_api" \| null` | Which source succeeded |
-| `file_path` | `str \| null` | Absolute path to saved file (`.pdf` or `.xml`) |
+| `file_path` | `str \| null` | Saved file path as written by the downloader (`.pdf` or `.xml`); may be relative when output dir is relative |
 | `file_size_kb` | `int \| null` | File size in KB |
 | `error` | `str \| null` | Error message on failure |
 
