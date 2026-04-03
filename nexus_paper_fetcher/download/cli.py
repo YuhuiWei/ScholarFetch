@@ -14,7 +14,7 @@ _DEFAULT_OUTPUT_DIR = Path(
 def download_command(
     results_file: Path = typer.Argument(..., help="Path to Phase 1 results JSON"),
     output_dir: Path = typer.Option(
-        _DEFAULT_OUTPUT_DIR, "--output-dir", help="Directory to save PDFs"
+        _DEFAULT_OUTPUT_DIR, "--output-dir", help="Directory to save downloaded files"
     ),
     top: Optional[int] = typer.Option(None, "--top", help="Download only top N papers"),
 ) -> None:

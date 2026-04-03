@@ -286,6 +286,55 @@ async def test_run_download_recovers_openalex_pdf_for_saved_results(tmp_path):
     assert manifest.entries[0].source_used == "open_access_url"
 
 
+@respx.mock
+async def test_run_download_falls_back_to_elsevier_xml_after_oa_failures(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("ELSEVIER_API_KEY", "test-key")
+    papers = [
+        Paper.create(
+            title="Elsevier XML Fallback",
+            doi="10.1016/j.cell.2024.01.026",
+            year=2024,
+            scores=ScoreBreakdown(composite=0.9),
+        ),
+    ]
+    respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    respx.get("https://api.unpaywall.org/v2/10.1016/j.cell.2024.01.026").mock(
+        return_value=httpx.Response(404, json={})
+    )
+    respx.get(
+        "https://api.elsevier.com/content/article/doi/10.1016/j.cell.2024.01.026"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            content=(
+                b'<?xml version="1.0" encoding="UTF-8"?>'
+                b"<full-text-retrieval-response><coredata>"
+                b"</coredata></full-text-retrieval-response>"
+            ),
+        )
+    )
+
+    output_dir = tmp_path / "papers"
+    manifest = await run_download(_make_results_file(tmp_path, papers=papers), output_dir)
+
+    assert len(manifest.entries) == 1
+    entry = manifest.entries[0]
+    assert entry.status == "success"
+    assert entry.source_used == "elsevier_api"
+    assert entry.file_path is not None
+    file_path = Path(entry.file_path)
+    assert file_path.suffix == ".xml"
+    assert file_path.exists()
+
+
 # ── CLI smoke tests ────────────────────────────────────────────────────────
 
 @respx.mock
@@ -353,3 +402,14 @@ def test_cli_skip_ezproxy_option_rejected(tmp_path):
     )
     assert result.exit_code == 2
     assert "No such option: --skip-ezproxy" in result.output
+
+
+def test_cli_output_dir_help_mentions_downloaded_files():
+    from typer.testing import CliRunner
+    from nexus_paper_fetcher.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["download", "--help"])
+    assert result.exit_code == 0
+    assert "Directory to save downloaded files" in result.output
+    assert "Directory to save PDFs" not in result.output
