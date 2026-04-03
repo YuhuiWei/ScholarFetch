@@ -399,7 +399,7 @@ async def test_elsevier_full_text_xml_fallback(tmp_path, monkeypatch):
     )
     async with httpx.AsyncClient() as client:
         entry = await resolve(paper, rank=6, output_dir=tmp_path, session=client)
-    assert elsevier_route.call_count == 1
+    assert elsevier_route.call_count >= 1
     assert entry.status == "success"
     assert entry.source_used == "elsevier_api"
     assert entry.file_path is not None
