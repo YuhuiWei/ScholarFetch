@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 _FIELDS = ",".join([
     "title", "abstract", "year", "authors", "venue",
     "citationCount", "influentialCitationCount",
-    "openAccessPdf", "externalIds", "tldr",
+    "openAccessPdf", "externalIds", "publicationTypes", "tldr",
 ])
 
 
@@ -35,6 +35,12 @@ def _s2_to_paper(item: dict) -> Optional[Paper]:
 
     oap = item.get("openAccessPdf") or {}
     open_access_url = oap.get("url")
+    publication_types = [
+        str(publication_type).lower()
+        for publication_type in (item.get("publicationTypes") or [])
+        if publication_type
+    ]
+    publication_type = publication_types[0] if publication_types else None
 
     return Paper.create(
         title=title,
@@ -45,6 +51,10 @@ def _s2_to_paper(item: dict) -> Optional[Paper]:
         venue=item.get("venue"),
         abstract=item.get("abstract"),
         citation_count=citation_count,
+        publication_type=publication_type,
+        source_publication_types=(
+            {"semantic_scholar": publication_type} if publication_type else {}
+        ),
         semantic_scholar_id=item.get("paperId"),
         open_access_pdf_url=open_access_url,
         sources=["semantic_scholar"],

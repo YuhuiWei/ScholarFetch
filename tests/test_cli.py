@@ -33,11 +33,17 @@ def test_fetch_command_writes_output(tmp_path, monkeypatch):
 
     out_path = tmp_path / "result.json"
     runner = CliRunner()
-    result = runner.invoke(cli.app, ["fetch", "graph transformers", "--output", str(out_path)], input="4\n")
+    result = runner.invoke(
+        cli.app,
+        ["fetch", "graph transformers", "--output", str(out_path)],
+        input="specific\n",
+    )
 
     assert result.exit_code == 0
     assert out_path.exists()
     run_mock.assert_awaited_once()
+    submitted = run_mock.await_args.args[0]
+    assert submitted.keyword_count == 3
 
 
 def test_fetch_command_can_override_keyword_count(tmp_path, monkeypatch):
@@ -111,9 +117,38 @@ def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
     result = runner.invoke(
         cli.app,
         ["shell", "--output-dir", str(tmp_path)],
-        input="attention\n4\nquit\n",
+        input="attention\nbroader\nquit\n",
     )
 
     assert result.exit_code == 0
     assert run_mock.await_count == 1
     assert len(list(tmp_path.glob("*.json"))) == 1
+    submitted = run_mock.await_args.args[0]
+    assert submitted.keyword_count == 8
+
+
+def test_fetch_command_accepts_broad_scope_label(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        cli,
+        "parse_natural_language_query",
+        AsyncMock(return_value=(SearchQuery(query="vision transformers", top_n=3), None)),
+    )
+    monkeypatch.setattr(
+        cli,
+        "prepare_query",
+        AsyncMock(return_value=("cs_ml", ["vision"], "vision transformers", "fallback", ["cs_ml"], "vision transformers", ["vision"], [])),
+    )
+    run_mock = AsyncMock(return_value=_make_result("vision transformers"))
+    monkeypatch.setattr(cli, "run", run_mock)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["fetch", "vision transformers", "--output", str(tmp_path / "result.json")],
+        input="broad\n",
+    )
+
+    assert result.exit_code == 0
+    submitted = run_mock.await_args.args[0]
+    assert submitted.search_scope == "broad"
+    assert submitted.keyword_count == 8

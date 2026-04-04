@@ -265,3 +265,147 @@ async def test_openreview_fetcher_handles_404_venue():
         SearchQuery(query="test", top_n=5, year_from=2022, year_to=2022)
     )
     assert papers == []
+
+
+@respx.mock
+async def test_openreview_fetcher_uses_query_search_route():
+    search_route = respx.get("https://api2.openreview.net/notes/search").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "notes": [
+                    {
+                        "id": "srch1",
+                        "forum": "srch1",
+                        "content": {
+                            "title": {"value": "Deep Visual Representation Learning"},
+                            "abstract": {"value": "We present a vision representation model."},
+                            "authors": {"value": ["Lee, A."]},
+                            "venue": {"value": "ICLR 2025"},
+                        },
+                        "cdate": 1735689600000,
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://api2.openreview.net/notes").mock(return_value=httpx.Response(404))
+
+    papers = await OpenReviewFetcher().fetch(
+        SearchQuery(query="recent computer vision deep representation study", top_n=5)
+    )
+
+    assert search_route.called
+    assert any(p.title == "Deep Visual Representation Learning" for p in papers)
+
+
+async def test_openreview_fetcher_defaults_year_to_current_year(monkeypatch):
+    import nexus_paper_fetcher.fetchers.openreview as openreview
+
+    years_seen = []
+
+    async def fake_search_query(self, client, query_text, year_from, year_to, limit):
+        return []
+
+    async def fake_fetch_venue_year(self, client, venue, year):
+        years_seen.append(year)
+        return []
+
+    monkeypatch.setattr(openreview.OpenReviewFetcher, "_search_query", fake_search_query)
+    monkeypatch.setattr(openreview.OpenReviewFetcher, "_fetch_venue_year", fake_fetch_venue_year)
+
+    papers = await openreview.OpenReviewFetcher().fetch(
+        SearchQuery(query="vision transformers", top_n=5, year_from=2025)
+    )
+
+    assert papers == []
+    assert years_seen
+    assert max(years_seen) >= 2025
+
+
+async def test_openreview_fetcher_uses_authenticated_v2_search_in_pages(monkeypatch):
+    import nexus_paper_fetcher.fetchers.openreview as openreview
+
+    class FakeNote:
+        def __init__(self, title: str, year: int):
+            self._payload = {
+                "id": title,
+                "forum": title,
+                "content": {
+                    "title": {"value": title},
+                    "abstract": {"value": f"{title} abstract"},
+                    "authors": {"value": ["Lee, A."]},
+                    "venue": {"value": f"ICLR {year}"},
+                },
+                "cdate": 1735689600000 if year == 2025 else 1704067200000,
+            }
+
+        def to_json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self):
+            self.calls = []
+
+        def search_notes(self, term, content="all", group="all", source="all", limit=None, offset=None):
+            self.calls.append(
+                {
+                    "term": term,
+                    "content": content,
+                    "group": group,
+                    "source": source,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+            if offset == 0:
+                return [FakeNote("Vision Transformer A", 2025), FakeNote("Vision Transformer B", 2025)]
+            if offset == 2:
+                return [FakeNote("Vision Transformer C", 2025)]
+            return []
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(
+        openreview,
+        "config",
+        type(
+            "c",
+            (),
+            {
+                "OPENREVIEW_TIMEOUT": 15.0,
+                "OPENREVIEW_USERNAME": "user@example.com",
+                "OPENREVIEW_PASSWORD": "secret",
+                "OPENREVIEW_BASEURL": "https://api2.openreview.net",
+                "OPENREVIEW_SEARCH_PAGE_SIZE": 2,
+            },
+        )(),
+    )
+    monkeypatch.setattr(openreview.OpenReviewFetcher, "_get_api_v2_client", lambda self: fake_client)
+
+    papers = await openreview.OpenReviewFetcher().fetch(
+        SearchQuery(query="transformer computer vision", top_n=5, fetch_per_source=3)
+    )
+
+    assert [paper.title for paper in papers[:3]] == [
+        "Vision Transformer A",
+        "Vision Transformer B",
+        "Vision Transformer C",
+    ]
+    assert fake_client.calls[:2] == [
+        {
+            "term": "transformer computer vision",
+            "content": "all",
+            "group": "all",
+            "source": "all",
+            "limit": 2,
+            "offset": 0,
+        },
+        {
+            "term": "transformer computer vision",
+            "content": "all",
+            "group": "all",
+            "source": "all",
+            "limit": 2,
+            "offset": 2,
+        },
+    ]

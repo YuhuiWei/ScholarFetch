@@ -63,6 +63,7 @@ def _work_to_paper(work: dict) -> Optional[Paper]:
 
     raw_id = work.get("id", "")
     openalex_id = raw_id.removeprefix("https://openalex.org/") if raw_id else None
+    publication_type = str(work.get("type") or "").lower() or None
 
     return Paper.create(
         title=title,
@@ -72,6 +73,10 @@ def _work_to_paper(work: dict) -> Optional[Paper]:
         venue=venue,
         abstract=abstract,
         citation_count=work.get("cited_by_count"),
+        publication_type=publication_type,
+        source_publication_types=(
+            {"openalex": publication_type} if publication_type else {}
+        ),
         openalex_id=openalex_id,
         open_access_pdf_url=extract_open_access_pdf_url(work),
         sources=["openalex"],

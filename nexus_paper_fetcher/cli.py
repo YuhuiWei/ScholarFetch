@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -23,7 +23,7 @@ def main() -> None:
 
 
 def _auto_output_path(query: str, top_n: int) -> Path:
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     import re
     slug = re.sub(r"[^\w]", "-", query.lower())[:40].strip("-")
     Path("results").mkdir(exist_ok=True)
@@ -39,6 +39,8 @@ def _write_result(result, out_path: Path) -> None:
 
 def _print_summary(result) -> None:
     print(f"[nexus] ranked top {len(result.papers)}  →  {result.output_path}", file=sys.stderr)
+    if getattr(result, "not_found", False):
+        print("[nexus] exact paper match not found — showing closest matches", file=sys.stderr)
     header = f"\n{'Rank':>4}  {'Score':>5}  {'Year':>4}  {'Venue':<22}  Title"
     print(header, file=sys.stderr)
     for i, paper in enumerate(result.papers, 1):
@@ -47,6 +49,49 @@ def _print_summary(result) -> None:
         year = str(paper.year or "—")
         score = f"{paper.scores.composite:.3f}"
         print(f"{i:>4}  {score:>5}  {year:>4}  {venue:<22}  {title}", file=sys.stderr)
+
+
+def _keyword_count_from_scope(scope: str) -> int:
+    normalized = scope.strip().lower()
+    if normalized in {"specific", "narrow", "less"}:
+        return 3
+    if normalized in {"broad", "broader", "more"}:
+        return 8
+    raise typer.BadParameter("Search scope must be 'specific' or 'broad'.")
+
+
+def _apply_keyword_strategy(
+    search_query: SearchQuery,
+    *,
+    cli_keyword_count: Optional[int],
+    no_keyword_expansion: bool,
+) -> None:
+    if search_query.query_intent == "paper_lookup":
+        search_query.search_scope = "specific"
+        search_query.keyword_count = 0
+        return
+
+    if no_keyword_expansion:
+        search_query.search_scope = "specific"
+        search_query.keyword_count = 0
+        return
+
+    if cli_keyword_count is not None:
+        search_query.keyword_count = cli_keyword_count
+        return
+
+    if search_query.keyword_count is not None:
+        if search_query.keyword_count == 0:
+            search_query.search_scope = "specific"
+        elif search_query.keyword_count <= 3:
+            search_query.search_scope = "specific"
+        elif search_query.keyword_count >= 8:
+            search_query.search_scope = "broad"
+        return
+
+    scope = typer.prompt("Search scope [specific/broad]", default="specific")
+    search_query.search_scope = scope.strip().lower()
+    search_query.keyword_count = _keyword_count_from_scope(search_query.search_scope)
 
 
 @app.command()
@@ -75,14 +120,11 @@ def fetch(
         if journal is not None:
             sq.journal = journal
         sq.fetch_per_source = fetch_per_source
-
-        if no_keyword_expansion:
-            sq.keyword_count = 0
-        elif keyword_count is not None:
-            sq.keyword_count = keyword_count
-        else:
-            kc = typer.prompt("Keyword expansion count", default=5)
-            sq.keyword_count = int(kc)
+        _apply_keyword_strategy(
+            sq,
+            cli_keyword_count=keyword_count,
+            no_keyword_expansion=no_keyword_expansion,
+        )
 
         await prepare_query(sq, domain_category_override=domain_category or domain)
         result = await run(sq, domain_category_override=domain_category or domain)
@@ -111,8 +153,11 @@ def shell(
 
         async def _run(query: str) -> None:
             sq, domain = await parse_natural_language_query(query)
-            kc = typer.prompt("Keyword expansion count", default=5)
-            sq.keyword_count = int(kc)
+            _apply_keyword_strategy(
+                sq,
+                cli_keyword_count=None,
+                no_keyword_expansion=False,
+            )
             await prepare_query(sq, domain_category_override=domain)
             result = await run(sq, domain_category_override=domain)
             if not result.papers:

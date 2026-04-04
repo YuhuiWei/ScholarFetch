@@ -21,6 +21,7 @@ Return a JSON object with these fields (all optional except query):
   year_to        integer  — latest publication year, or null
   author         string   — specific author name, or null
   domain_category string  — one of: cs_ml, biology, chemistry, general, or null
+  query_intent   string   — one of: paper_lookup, domain_search
   keyword_count  integer  — number of expansion keywords to add; use 0 for no expansion,
                             3 for "less", 8 for "more", null when unspecified
   paper_titles   array[string] — specific paper titles when the user is asking for named papers
@@ -55,7 +56,7 @@ Examples:
   → {"query": "diffusion models", "keyword_count": 7}
 
   "find the papers Attention Is All You Need and BERT"
-  → {"query": "Attention Is All You Need BERT", "paper_titles": ["Attention Is All You Need", "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"]}
+  → {"query": "Attention Is All You Need BERT", "query_intent": "paper_lookup", "paper_titles": ["Attention Is All You Need", "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"]}
 
   "show more cited transformer papers from top tier CS conferences"
   → {"query": "transformer papers", "weight_preferences": ["citation"], "venue_preferences": ["top tier cs conference"]}
@@ -72,7 +73,7 @@ Examples:
 Return ONLY valid JSON, nothing else."""
 
 
-def _fallback_keyword_count(text: str) -> int:
+def _fallback_keyword_count(text: str) -> Optional[int]:
     lowered = text.lower()
     if "no keyword expansion" in lowered or "no expansion" in lowered:
         return 0
@@ -84,11 +85,36 @@ def _fallback_keyword_count(text: str) -> int:
     match = re.search(r"\b(\d+)\s+(?:expanded?\s+)?keywords?\b", lowered)
     if match:
         return int(match.group(1))
-    return 5
+    return None
+
+
+def _fallback_top_n(text: str, default_top_n: int) -> int:
+    lowered = text.lower()
+    match = re.search(r"\b(?:top|find|show|list|return)\s+(\d+)\b", lowered)
+    if match:
+        return int(match.group(1))
+    return default_top_n
 
 
 def _fallback_paper_titles(text: str) -> list[str]:
     return [match.strip() for match in re.findall(r'"([^"]+)"', text) if match.strip()]
+
+
+def _fallback_query_intent(text: str, paper_titles: list[str]) -> str:
+    lowered = text.lower()
+    if paper_titles:
+        return "paper_lookup"
+    singular_lookup_patterns = (
+        "find the paper ",
+        "find paper ",
+        "look up the paper ",
+        "paper titled ",
+        "paper called ",
+        "publication titled ",
+    )
+    if any(pattern in lowered for pattern in singular_lookup_patterns):
+        return "paper_lookup"
+    return "domain_search"
 
 
 def _fallback_weight_preferences(text: str) -> list[str]:
@@ -198,13 +224,14 @@ async def parse_natural_language_query(
         return (
             SearchQuery(
                 query=text,
-                top_n=default_top_n,
+                top_n=_fallback_top_n(text, default_top_n),
                 keyword_count=_fallback_keyword_count(text),
-                paper_titles=_fallback_paper_titles(text),
+                paper_titles=(paper_titles := _fallback_paper_titles(text)),
                 weight_preferences=_fallback_weight_preferences(text),
                 venue_preferences=_fallback_venue_preferences(text),
                 publication_categories=_fallback_publication_categories(text),
                 keyword_logic=_fallback_keyword_logic(text),
+                query_intent=_fallback_query_intent(text, paper_titles),
             ),
             None,
         )
@@ -233,13 +260,17 @@ async def parse_natural_language_query(
             keyword_count=(
                 int(data["keyword_count"])
                 if data.get("keyword_count") is not None
-                else 5
+                else None
             ),
-            paper_titles=data.get("paper_titles") or [],
+            paper_titles=(paper_titles := (data.get("paper_titles") or [])),
             weight_preferences=data.get("weight_preferences") or [],
             venue_preferences=data.get("venue_preferences") or [],
             publication_categories=data.get("publication_categories") or ["primary_research"],
             keyword_logic=(data.get("keyword_logic") or "AUTO").upper(),
+            query_intent=(
+                data.get("query_intent")
+                or _fallback_query_intent(text, paper_titles)
+            ),
         )
         domain = data.get("domain_category") or None
         return sq, domain
@@ -249,13 +280,14 @@ async def parse_natural_language_query(
         return (
             SearchQuery(
                 query=text,
-                top_n=default_top_n,
+                top_n=_fallback_top_n(text, default_top_n),
                 keyword_count=_fallback_keyword_count(text),
-                paper_titles=_fallback_paper_titles(text),
+                paper_titles=(paper_titles := _fallback_paper_titles(text)),
                 weight_preferences=_fallback_weight_preferences(text),
                 venue_preferences=_fallback_venue_preferences(text),
                 publication_categories=_fallback_publication_categories(text),
                 keyword_logic=_fallback_keyword_logic(text),
+                query_intent=_fallback_query_intent(text, paper_titles),
             ),
             None,
         )

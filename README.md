@@ -27,6 +27,10 @@ export OPENAI_API_KEY=sk-...
 # Optional — higher Semantic Scholar rate limits
 export S2_API_KEY=...
 
+# Optional — authenticated OpenReview V2 search
+export OPENREVIEW_USERNAME=you@example.edu
+export OPENREVIEW_PASSWORD=...
+
 # For OpenAlex polite pool
 export NEXUS_EMAIL=you@institution.edu
 
@@ -46,6 +50,9 @@ Fetch and rank papers from multiple academic sources.
 ```bash
 # Basic search
 nexus fetch "single-cell RNA sequencing" --top-n 20
+
+# Paper lookup
+nexus fetch 'find the paper "Attention Is All You Need"' --top-n 5
 
 # With filters
 nexus fetch "attention mechanisms" --top-n 50 --domain-category cs_ml --year-from 2020
@@ -71,7 +78,8 @@ nexus fetch "transformer architectures" --output results/transformers.json
 nexus shell --output-dir results/
 ```
 
-Runs a read-eval loop: enter a query, get ranked results, repeat until `quit`.
+Runs a read-eval loop: enter a query, choose `specific` or `broad` scope for domain searches, get ranked results, repeat until `quit`.
+Specific paper lookups skip keyword expansion and return exact-title matches first; if an exact match is not found, the result JSON is marked `not_found: true` and the closest matches are returned.
 
 ### Scoring
 
@@ -83,15 +91,27 @@ Papers are ranked by a composite score with domain-aware weights:
 | Citation | Age-adjusted citation count |
 | Recency | Exponential decay by publication year |
 | Relevance | OpenAI embedding cosine similarity (requires `OPENAI_API_KEY`) |
+| LLM relevance | `gpt-4o-mini` 1-5 relevance score blended into reranking for uncertain/top candidates |
 | OpenReview bonus | Extra weight for accepted conference papers |
+
+### Query modes
+
+The fetch pipeline distinguishes between two request types:
+
+| Mode | Behavior |
+|------|----------|
+| Paper lookup | Finds a single paper or named set of papers, ranks exact title matches first, and reports `not_found` when only approximate matches are available |
+| Domain search | Uses keyword expansion plus broad retrieval to build a ranked list in the requested area |
+
+By default, the layered evaluation stage excludes review/survey articles unless the query explicitly asks for review/survey papers.
 
 ### Sources
 
 | Source | Notes |
 |--------|-------|
 | OpenAlex | Open metadata, abstract reconstruction, cursor pagination |
-| Semantic Scholar | Influential citation count, open access URL |
-| OpenReview | CS/ML only (`domain_category=cs_ml`); venue+year enumeration |
+| Semantic Scholar | Influential citation count, open access URL, publication type metadata |
+| OpenReview | CS/ML only (`domain_category=cs_ml`); authenticated V2 search when credentials are set, else venue/year fallback |
 
 ---
 
@@ -167,6 +187,7 @@ pytest -m integration           # real API tests (requires keys)
 - Dedup: exact DOI → fuzzy title (rapidfuzz `token_sort_ratio`, threshold 92)
 - OpenReview only queried when `domain_category == cs_ml`
 - `RelevanceScorer` defaults to 0.5 when `OPENAI_API_KEY` unset
+- Layered evaluation removes obvious review/survey mismatches before final reranking
 - All fetchers return `[]` on failure — never raise
 - Downloads capped at 3 concurrent (`asyncio.Semaphore(3)`)
 - Manifest written atomically after each paper (`os.replace`) for SLURM crash-safety
@@ -179,6 +200,8 @@ pytest -m integration           # real API tests (requires keys)
 |----------|-------|-------------|
 | `OPENAI_API_KEY` | 1 | NLP parsing, relevance scoring, methodology classification |
 | `S2_API_KEY` | 1 | Semantic Scholar higher rate limits |
+| `OPENREVIEW_USERNAME` | 1 | Optional OpenReview V2 username for authenticated note search |
+| `OPENREVIEW_PASSWORD` | 1 | Optional OpenReview V2 password for authenticated note search |
 | `NEXUS_EMAIL` | 1 | OpenAlex polite pool email |
 | `NEXUS_DOWNLOAD_DIR` | 2 | Preferred default output directory for downloaded files |
 | `NEXUS_PDF_DIR` | 2 | Legacy fallback output directory when `NEXUS_DOWNLOAD_DIR` is unset |

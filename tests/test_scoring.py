@@ -150,6 +150,38 @@ async def test_relevance_scores_between_zero_and_one(monkeypatch):
     assert 0.0 <= scores[0] <= 1.0
 
 
+async def test_relevance_batches_large_requests(monkeypatch):
+    import nexus_paper_fetcher.scoring.relevance as rel
+
+    monkeypatch.setattr(
+        rel,
+        "config",
+        type("c", (), {"OPENAI_API_KEY": "fake-key"})(),
+    )
+    monkeypatch.setattr(rel, "MAX_INPUTS_PER_REQUEST", 300)
+
+    calls = []
+
+    async def fake_create(*, model, input):
+        calls.append(len(input))
+        mock_response = MagicMock()
+        mock_response.data = [
+            MagicMock(embedding=[1.0, 0.0, 0.0, 0.0])
+            for _ in range(len(input))
+        ]
+        return mock_response
+
+    mock_client = MagicMock()
+    mock_client.embeddings.create = fake_create
+    monkeypatch.setattr(rel.RelevanceScorer, "_client", mock_client)
+
+    abstracts = [f"abstract {i}" for i in range(650)]
+    scores = await RelevanceScorer.score_batch("vision query", abstracts)
+
+    assert len(scores) == 650
+    assert calls == [301, 301, 51]
+
+
 from unittest.mock import AsyncMock, patch
 from nexus_paper_fetcher.models import Paper
 from nexus_paper_fetcher.scoring.scorer import score_all, DOMAIN_WEIGHTS
@@ -197,3 +229,29 @@ async def test_composite_capped_at_one(monkeypatch):
                          sources=["openreview"])
     result = await score_all([paper], "test", "cs_ml")
     assert result[0].scores.composite <= 1.0
+
+
+async def test_composite_uses_llm_relevance_score_when_present(monkeypatch):
+    import nexus_paper_fetcher.scoring.relevance as rel
+    import nexus_paper_fetcher.scoring.scorer as scorer
+
+    monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+    monkeypatch.setattr(
+        scorer.RelevanceScorer,
+        "score_batch",
+        AsyncMock(return_value=[0.1]),
+    )
+
+    paper = Paper.create(
+        title="Vision Representation Learning",
+        year=2024,
+        venue="CVPR",
+        citation_count=10,
+        sources=["openalex"],
+    )
+    object.__setattr__(paper, "llm_relevance_score", 5)
+
+    result = await score_all([paper], "vision representation learning", "cs_ml")
+
+    assert getattr(result[0].scores, "llm_relevance", None) == 1.0
+    assert result[0].scores.composite > 0.3

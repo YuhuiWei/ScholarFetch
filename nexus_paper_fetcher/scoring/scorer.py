@@ -35,13 +35,21 @@ async def score_all(
         c = CitationScorer.score(paper.citation_count, paper.year, max_citations)
         r = RecencyScorer.score(paper.year, domain_category)
         bonus = OPENREVIEW_BONUS.get(paper.openreview_tier or "", 0.0)
+        llm_relevance = None
+        effective_relevance = rel_score
+        if paper.llm_relevance_score is not None:
+            llm_relevance = round(
+                max(0.0, min(1.0, (paper.llm_relevance_score - 1) / 4)),
+                4,
+            )
+            effective_relevance = round((rel_score + llm_relevance) / 2, 4)
 
         composite = min(
             1.0,
             weights["venue"] * v
             + weights["citation"] * c
             + weights["recency"] * r
-            + weights["relevance"] * rel_score
+            + weights["relevance"] * effective_relevance
             + bonus,
         )
 
@@ -50,6 +58,7 @@ async def score_all(
             citation=round(c, 4),
             recency=round(r, 4),
             relevance=rel_score,
+            llm_relevance=llm_relevance,
             openreview_bonus=bonus,
             composite=round(composite, 4),
         )

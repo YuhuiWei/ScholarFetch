@@ -1,10 +1,21 @@
 from __future__ import annotations
 import asyncio
 import logging
+import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
+from rapidfuzz import fuzz
+
+import nexus_paper_fetcher.config as cfg
+from nexus_paper_fetcher.evaluation import (
+    LlmCategoricalJudge,
+    apply_metadata_heuristics,
+    filter_by_target_category,
+    select_llm_candidates,
+    target_publication_category,
+)
 from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
 from nexus_paper_fetcher.fetchers.openalex import OpenAlexFetcher
 from nexus_paper_fetcher.fetchers.semantic_scholar import SemanticScholarFetcher
@@ -20,6 +31,41 @@ def _err(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
+def _normalize_title(text: str) -> str:
+    normalized = re.sub(r"[^\w\s]", " ", text.lower())
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _rank_lookup_results(
+    papers: list[Paper],
+    search_query: SearchQuery,
+) -> tuple[list[Paper], bool, str]:
+    targets = search_query.paper_titles or [search_query.query]
+    normalized_targets = [_normalize_title(title) for title in targets if title.strip()]
+
+    for paper in papers:
+        normalized_title = _normalize_title(paper.title)
+        similarities = [
+            fuzz.token_sort_ratio(normalized_title, normalized_target)
+            for normalized_target in normalized_targets
+        ]
+        best_similarity = max(similarities, default=0.0)
+        paper.title_match_score = round(best_similarity / 100.0, 4)
+        paper.exact_match = normalized_title in normalized_targets
+
+    ranked = sorted(
+        papers,
+        key=lambda paper: (
+            paper.exact_match,
+            paper.title_match_score,
+            paper.scores.composite,
+        ),
+        reverse=True,
+    )
+    not_found = not any(paper.exact_match for paper in ranked)
+    return ranked[: search_query.top_n], not_found, "closest_match" if not_found else "exact_match"
+
+
 async def run(
     query: SearchQuery,
     domain_category_override: Optional[str] = None,
@@ -27,6 +73,9 @@ async def run(
     # Step 1: classify domain
     domain_category = await classify_domain(query.query, domain_category_override)
     _err(f"[nexus] classifying domain... {domain_category}")
+    _err(f"[nexus] query intent... {query.query_intent}")
+    if query.query_intent == "domain_search" and query.search_scope:
+        _err(f"[nexus] search scope... {query.search_scope}")
 
     # Step 2: parallel fetch
     active_fetchers = [OpenAlexFetcher(), SemanticScholarFetcher()]
@@ -64,21 +113,58 @@ async def run(
     unique = deduplicate(all_papers)
     _err(f"[nexus] deduplicating → {len(unique)} unique")
 
-    # Step 4: score
-    import nexus_paper_fetcher.config as cfg
+    # Step 4: layered evaluation and score
+    target_category = target_publication_category(query)
+    candidates, uncertain, heuristic_filtered = apply_metadata_heuristics(
+        unique,
+        target_category,
+    )
+    if heuristic_filtered:
+        _err(
+            f"[nexus] metadata heuristics filtered {heuristic_filtered} "
+            f"{'review/survey' if target_category == 'primary' else 'primary'} papers"
+        )
+    if not candidates:
+        candidates = []
+
     suffix = " (relevance via OpenAI)" if cfg.OPENAI_API_KEY else " (relevance defaulting to 0.5)"
-    _err(f"[nexus] scoring {len(unique)} papers{suffix}...")
-    scored = await score_all(unique, query.query, domain_category)
+    _err(f"[nexus] scoring {len(candidates)} papers{suffix}...")
+    scored = await score_all(candidates, query.query, domain_category)
+
+    llm_targets = select_llm_candidates(scored, uncertain, query.top_n) if cfg.OPENAI_API_KEY else []
+    if llm_targets:
+        await LlmCategoricalJudge.evaluate_batch(llm_targets, query.query)
+        llm_filtered_candidates, llm_filtered = filter_by_target_category(
+            scored,
+            target_category,
+        )
+        if llm_filtered:
+            _err(
+                f"[nexus] llm evaluation filtered {llm_filtered} "
+                f"{'review/survey' if target_category == 'primary' else 'primary'} papers"
+            )
+        if llm_targets:
+            _err(f"[nexus] llm evaluated {len(llm_targets)} papers")
+        scored = await score_all(llm_filtered_candidates, query.query, domain_category)
 
     # Step 5: rank and truncate
-    top_n = sorted(scored, key=lambda p: p.scores.composite, reverse=True)[: query.top_n]
+    not_found = False
+    match_strategy = "ranked"
+    if query.query_intent == "paper_lookup" or query.paper_titles:
+        top_n, not_found, match_strategy = _rank_lookup_results(scored, query)
+        if not_found and top_n:
+            _err("[nexus] exact paper match not found; returning closest matches")
+    else:
+        top_n = sorted(scored, key=lambda p: p.scores.composite, reverse=True)[: query.top_n]
 
     return RunResult(
         query=query.query,
         domain_category=domain_category,
         params=query,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         sources_used=sources_used,
         sources_failed=sources_failed,
         papers=top_n,
+        not_found=not_found,
+        match_strategy=match_strategy,
     )

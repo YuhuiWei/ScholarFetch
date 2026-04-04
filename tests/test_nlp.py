@@ -121,3 +121,29 @@ async def test_parse_natural_language_query_fallback_detects_exact_venue_and_aut
     assert search_query.keyword_logic == "AUTO"
     assert "citation" in search_query.weight_preferences
     assert "high_impact" in search_query.weight_preferences
+
+
+async def test_parse_natural_language_query_fallback_detects_lookup_intent(monkeypatch):
+    import nexus_paper_fetcher.nlp as nlp
+
+    monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+
+    search_query, domain = await parse_natural_language_query(
+        'find the paper "Attention Is All You Need"'
+    )
+
+    assert domain is None
+    assert search_query.paper_titles == ["Attention Is All You Need"]
+    assert getattr(search_query, "query_intent", None) == "paper_lookup"
+
+
+async def test_parse_natural_language_query_fallback_reads_requested_result_count(monkeypatch):
+    import nexus_paper_fetcher.nlp as nlp
+
+    monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+
+    search_query, _ = await parse_natural_language_query(
+        "find 10 paper in recent computer vision deep representation study"
+    )
+
+    assert search_query.top_n == 10

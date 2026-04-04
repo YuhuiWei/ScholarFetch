@@ -34,6 +34,16 @@ def _merge(papers: list[Paper]) -> Paper:
         base.openalex_id = base.openalex_id or other.openalex_id
         base.open_access_pdf_url = base.open_access_pdf_url or other.open_access_pdf_url
         base.openreview_tier = base.openreview_tier or other.openreview_tier
+        if other.source_publication_types:
+            base.source_publication_types.update(other.source_publication_types)
+        if not base.publication_type:
+            base.publication_type = other.publication_type
+        elif (
+            other.publication_type
+            and "review" in other.publication_type.lower()
+            and "review" not in base.publication_type.lower()
+        ):
+            base.publication_type = other.publication_type
         base.citation_count = max(
             base.citation_count or 0, other.citation_count or 0
         ) or None
