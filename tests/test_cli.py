@@ -92,6 +92,7 @@ def test_fetch_forwards_non_interactive_download_flags(tmp_path, monkeypatch):
     assert kwargs["download_top"] == 7
     assert kwargs["output_dir"] == output_dir
     assert kwargs["yes"] is True
+    assert kwargs["interactive"] is False
 
 
 def test_fetch_forwards_existing_fetch_controls_to_workflow(tmp_path, monkeypatch):
@@ -238,7 +239,7 @@ def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
     assert submitted.keyword_count == 8
 
 
-def test_fetch_forwards_interactive_broad_scope_choice_to_workflow(tmp_path, monkeypatch):
+def test_fetch_leaves_scope_keyword_strategy_to_workflow(tmp_path, monkeypatch):
     workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
     monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
     monkeypatch.setattr(
@@ -256,10 +257,10 @@ def test_fetch_forwards_interactive_broad_scope_choice_to_workflow(tmp_path, mon
     result = runner.invoke(
         cli.app,
         ["fetch", "vision transformers", "--output", str(tmp_path / "result.json")],
-        input="broad\n",
     )
 
     assert result.exit_code == 0
     workflow_mock.assert_awaited_once()
     kwargs = workflow_mock.await_args.kwargs
-    assert kwargs["keyword_count"] == 8
+    assert kwargs["keyword_count"] is None
+    assert kwargs["no_keyword_expansion"] is False

@@ -118,7 +118,7 @@ async def test_non_interactive_fails_fast_when_download_missing_required_args(
 
     with pytest.raises(
         (ValueError, typer.BadParameter),
-        match=r"(?i)output_dir.*required.*interactive\s*=\s*false",
+        match=r"(?i)output[_\s-]*dir.*required",
     ):
         await workflow_module.run_fetch_workflow(
             query="attention",
