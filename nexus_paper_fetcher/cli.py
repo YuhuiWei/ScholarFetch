@@ -12,6 +12,7 @@ from nexus_paper_fetcher.models import SearchQuery
 from nexus_paper_fetcher.pipeline import run
 from nexus_paper_fetcher.nlp import parse_natural_language_query, prepare_query
 from nexus_paper_fetcher.download.cli import download_command
+from nexus_paper_fetcher.workflow import run_fetch_workflow
 
 app = typer.Typer(help="Nexus Paper Fetcher — ranked academic paper search")
 app.command("download")(download_command)
@@ -37,13 +38,36 @@ def _write_result(result, out_path: Path) -> None:
         json.dump(result.model_dump(mode="json"), f, indent=2, default=str)
 
 
-def _print_summary(result) -> None:
-    print(f"[nexus] ranked top {len(result.papers)}  →  {result.output_path}", file=sys.stderr)
+class _TyperPromptAdapter:
+    def confirm(self, text: str, *, default: bool = False) -> bool:
+        return typer.confirm(text, default=default)
+
+    def prompt(self, text: str, *, default: Optional[str] = None) -> str:
+        return typer.prompt(text, default=default)
+
+
+def _print_summary(
+    result,
+    *,
+    papers: Optional[list] = None,
+    ranked_count: Optional[int] = None,
+    output_path: Optional[Path] = None,
+) -> None:
+    displayed_papers = papers if papers is not None else result.papers
+    full_count = ranked_count if ranked_count is not None else len(result.papers)
+    summary_path = output_path if output_path is not None else result.output_path
+
+    print(f"[nexus] ranked top {full_count}  →  {summary_path}", file=sys.stderr)
+    if len(displayed_papers) != full_count:
+        print(
+            f"[nexus] showing top {len(displayed_papers)} preview papers",
+            file=sys.stderr,
+        )
     if getattr(result, "not_found", False):
         print("[nexus] exact paper match not found — showing closest matches", file=sys.stderr)
     header = f"\n{'Rank':>4}  {'Score':>5}  {'Year':>4}  {'Venue':<22}  Title"
     print(header, file=sys.stderr)
-    for i, paper in enumerate(result.papers, 1):
+    for i, paper in enumerate(displayed_papers, 1):
         venue = (paper.venue or "—")[:22]
         title = (paper.title or "")[:55]
         year = str(paper.year or "—")
@@ -106,38 +130,49 @@ def fetch(
     domain_category: Optional[str] = typer.Option(None, "--domain-category"),
     keyword_count: Optional[int] = typer.Option(None, "--keyword-count", help="Number of expansion keywords"),
     no_keyword_expansion: bool = typer.Option(False, "--no-keyword-expansion", help="Disable keyword expansion"),
+    download: bool = typer.Option(False, "--download", help="Download full-text files after ranking"),
+    download_top: Optional[int] = typer.Option(None, "--download-top", help="Top N papers to download"),
+    output_dir: Optional[Path] = typer.Option(None, "--output-dir", help="Directory for downloaded files"),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "--non-interactive",
+        help="Non-interactive mode (skip prompts and use provided flags)",
+    ),
     output: Optional[Path] = typer.Option(None, "--output"),
 ) -> None:
     async def _run() -> None:
-        sq, domain = await parse_natural_language_query(query)
-        sq.top_n = top_n
-        if year_from is not None:
-            sq.year_from = year_from
-        if year_to is not None:
-            sq.year_to = year_to
-        if author is not None:
-            sq.author = author
-        if journal is not None:
-            sq.journal = journal
-        sq.fetch_per_source = fetch_per_source
-        _apply_keyword_strategy(
-            sq,
-            cli_keyword_count=keyword_count,
+        workflow_result = await run_fetch_workflow(
+            query=query,
+            top_n=top_n,
+            year_from=year_from,
+            year_to=year_to,
+            author=author,
+            journal=journal,
+            fetch_per_source=fetch_per_source,
+            domain_category=domain_category,
+            keyword_count=keyword_count,
             no_keyword_expansion=no_keyword_expansion,
+            output=output,
+            interactive=not yes,
+            download=download,
+            output_dir=output_dir,
+            download_top=download_top,
+            yes=yes,
+            prompt_io=_TyperPromptAdapter(),
+        )
+        _print_summary(
+            workflow_result.result,
+            papers=workflow_result.preview_papers,
+            ranked_count=len(workflow_result.result.papers),
+            output_path=workflow_result.saved_result_path,
         )
 
-        await prepare_query(sq, domain_category_override=domain_category or domain)
-        result = await run(sq, domain_category_override=domain_category or domain)
-
-        if not result.papers:
-            print("[nexus] error: all sources failed — no papers returned", file=sys.stderr)
-            raise typer.Exit(code=1)
-
-        out_path = output or _auto_output_path(query, top_n)
-        _write_result(result, out_path)
-        _print_summary(result)
-
-    asyncio.run(_run())
+    try:
+        asyncio.run(_run())
+    except ValueError as exc:
+        print(f"[nexus] error: {exc}", file=sys.stderr)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()

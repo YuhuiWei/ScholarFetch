@@ -45,7 +45,7 @@ export NEXUS_PDF_DIR=/path/to/papers
 
 ## Phase 1: Paper Screening
 
-Fetch and rank papers from multiple academic sources.
+Fetch and rank papers from multiple academic sources. `nexus fetch` can optionally trigger the download workflow in the same command.
 
 ```bash
 # Basic search
@@ -68,9 +68,28 @@ nexus fetch "diffusion models" --keyword-count 7
 
 # Save to a specific path
 nexus fetch "transformer architectures" --output results/transformers.json
+
+# Integrated fetch + download in one step
+nexus fetch "graph transformers for molecular property prediction" --download
+
+# Integrated fetch + download with explicit download controls
+nexus fetch "single-cell foundation models" --download --download-top 8 --output-dir /data/papers
+
+# Non-interactive automation mode (required for scripts/cron/SLURM)
+nexus fetch "retrieval augmented generation for biomedicine" \
+  --download \
+  --download-top 10 \
+  --output-dir /data/papers \
+  --yes
 ```
 
 **Output:** JSON file in `results/` containing ranked papers with scores, metadata, and source URLs.
+When `--download` is enabled, the fetch workflow also writes downloaded files and `manifest.json` to the selected output directory.
+
+### Non-interactive automation
+
+Use `--yes` (alias `--non-interactive`) to disable prompts and run with explicit flags only.
+If `--download` is set in non-interactive mode, `--output-dir` is required.
 
 ### Interactive shell mode
 
@@ -177,6 +196,34 @@ pytest                          # all unit tests (113 tests)
 pytest tests/test_download/ -v  # Phase 2 tests only
 pytest tests/test_dedup.py -v   # single file
 pytest -m integration           # real API tests (requires keys)
+```
+
+## Python API
+
+Use the integrated workflow API directly when embedding this tool in scripts or orchestrators:
+
+```python
+import asyncio
+from pathlib import Path
+
+from nexus_paper_fetcher.workflow import run_fetch_workflow
+
+
+async def main() -> None:
+    workflow_result = await run_fetch_workflow(
+        query="multimodal foundation models for pathology",
+        top_n=20,
+        download=True,
+        download_top=5,
+        output_dir=Path("/data/papers"),
+        interactive=False,
+        yes=True,
+    )
+    print("Saved ranked results:", workflow_result.saved_result_path)
+    print("Downloaded:", workflow_result.download_executed)
+
+
+asyncio.run(main())
 ```
 
 ---

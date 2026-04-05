@@ -275,3 +275,34 @@ def test_fetch_leaves_scope_keyword_strategy_to_workflow(tmp_path, monkeypatch):
     kwargs = workflow_mock.await_args.kwargs
     assert kwargs["keyword_count"] is None
     assert kwargs["no_keyword_expansion"] is False
+
+
+def test_fetch_summary_reports_full_ranked_count_with_preview_rows(tmp_path, monkeypatch):
+    workflow_result = _workflow_result(tmp_path)
+    full_result = RunResult(
+        query="attention",
+        domain_category="cs_ml",
+        params=SearchQuery(query="attention", top_n=20),
+        sources_used=["openalex"],
+        papers=[
+            Paper.create(title="Attention Is All You Need", year=2017, sources=["openalex"]),
+            Paper.create(title="Sparse Attention", year=2019, sources=["openalex"]),
+        ],
+    )
+    workflow_result.result = full_result
+    workflow_result.preview_papers = [full_result.papers[0]]
+    workflow_result.saved_result_path = tmp_path / "custom.json"
+
+    workflow_mock = AsyncMock(return_value=workflow_result)
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["fetch", "attention", "--output", str(tmp_path / "custom.json")],
+    )
+
+    assert result.exit_code == 0
+    assert "[nexus] ranked top 2  →" in result.output
+    assert str(tmp_path / "custom.json") in result.output
+    assert "[nexus] showing top 1 preview papers" in result.output
