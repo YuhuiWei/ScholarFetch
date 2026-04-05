@@ -41,11 +41,6 @@ def test_fetch_delegates_to_run_fetch_workflow(tmp_path, monkeypatch):
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
-    monkeypatch.setattr(
-        cli,
-        "run",
-        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
-    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -69,11 +64,6 @@ def test_fetch_forwards_non_interactive_download_flags(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli,
         "prepare_query",
-        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
-    )
-    monkeypatch.setattr(
-        cli,
-        "run",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
 
@@ -117,11 +107,6 @@ def test_fetch_forwards_keyword_count_to_workflow(tmp_path, monkeypatch):
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
-    monkeypatch.setattr(
-        cli,
-        "run",
-        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
-    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -152,11 +137,6 @@ def test_fetch_forwards_no_keyword_expansion_to_workflow(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli,
         "prepare_query",
-        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
-    )
-    monkeypatch.setattr(
-        cli,
-        "run",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
 
@@ -205,19 +185,19 @@ def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
     assert submitted.keyword_count == 8
 
 
-def test_fetch_command_accepts_broad_scope_label(tmp_path, monkeypatch):
+def test_fetch_forwards_interactive_broad_scope_choice_to_workflow(tmp_path, monkeypatch):
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
     monkeypatch.setattr(
         cli,
         "parse_natural_language_query",
-        AsyncMock(return_value=(SearchQuery(query="vision transformers", top_n=3), None)),
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
-        AsyncMock(return_value=SimpleNamespace()),
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
-    run_mock = AsyncMock(return_value=_make_result("vision transformers"))
-    monkeypatch.setattr(cli, "run", run_mock)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -227,6 +207,6 @@ def test_fetch_command_accepts_broad_scope_label(tmp_path, monkeypatch):
     )
 
     assert result.exit_code == 0
-    submitted = run_mock.await_args.args[0]
-    assert submitted.search_scope == "broad"
-    assert submitted.keyword_count == 8
+    workflow_mock.assert_awaited_once()
+    kwargs = workflow_mock.await_args.kwargs
+    assert kwargs["keyword_count"] == 8
