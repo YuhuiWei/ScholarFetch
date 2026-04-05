@@ -59,6 +59,11 @@ async def test_interactive_saves_full_results_and_stops_when_download_declined(
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
     monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
+    monkeypatch.setattr(
+        workflow_module.typer,
+        "prompt",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
+    )
 
     saved_results_path = tmp_path / "ranked.json"
     workflow_result = await workflow_module.run_fetch_workflow(
@@ -104,6 +109,11 @@ async def test_non_interactive_downloads_immediately_when_download_true(
     monkeypatch.setattr(
         workflow_module.typer,
         "confirm",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
+    )
+    monkeypatch.setattr(
+        workflow_module.typer,
+        "prompt",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
     )
 

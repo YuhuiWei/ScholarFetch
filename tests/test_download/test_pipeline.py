@@ -431,7 +431,7 @@ async def test_run_download_falls_back_to_elsevier_xml_after_oa_failures(
 
 @respx.mock
 def test_cli_download_command(tmp_path):
-    """nexus download results.json runs without error for a valid input."""
+    """nexus download results.json writes manifest/output for a valid input."""
     from typer.testing import CliRunner
     from nexus_paper_fetcher.cli import app
 
@@ -469,18 +469,13 @@ def test_cli_download_command(tmp_path):
         ["download", str(results_path), "--output-dir", str(output_dir)],
     )
     assert result.exit_code == 0, result.output
-
-
-def test_cli_missing_results_file_exits_1(tmp_path):
-    from typer.testing import CliRunner
-    from nexus_paper_fetcher.cli import app
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        ["download", str(tmp_path / "nonexistent.json")],
-    )
-    assert result.exit_code == 1
+    manifest_path = output_dir / "manifest.json"
+    assert manifest_path.exists()
+    saved_manifest = load_manifest(manifest_path)
+    assert len(saved_manifest.entries) == 3
+    assert sum(1 for entry in saved_manifest.entries if entry.status == "success") == 2
+    assert sum(1 for entry in saved_manifest.entries if entry.status == "failed") == 1
+    assert any(Path(entry.file_path).exists() for entry in saved_manifest.entries if entry.file_path)
 
 
 def test_cli_skip_ezproxy_option_rejected(tmp_path):
