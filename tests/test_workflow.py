@@ -594,3 +594,35 @@ async def test_non_interactive_expands_explicit_output_dir(
     expected_output_dir = Path("~/papers").expanduser()
     assert workflow_result.output_dir == expected_output_dir
     assert download_mock.await_args.args[1] == expected_output_dir
+
+
+async def test_expands_explicit_output_path_before_writing(
+    monkeypatch, workflow_module
+):
+    result = _make_result("explicit output path", total_papers=1)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="explicit output path"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    captured: dict[str, Path] = {}
+
+    def _capture_write(_result, out_path: Path):
+        captured["out_path"] = out_path
+
+    prompt_io = SimpleNamespace(confirm=Mock(return_value=False), prompt=Mock())
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", AsyncMock())
+    monkeypatch.setattr(workflow_module, "_write_result", _capture_write)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="explicit output path",
+        interactive=True,
+        output=Path("~/result.json"),
+        prompt_io=prompt_io,
+    )
+
+    expected_output = Path("~/result.json").expanduser()
+    assert workflow_result.saved_result_path == expected_output
+    assert captured["out_path"] == expected_output

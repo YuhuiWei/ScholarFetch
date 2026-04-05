@@ -134,6 +134,7 @@ async def run_fetch_workflow(
     prompts = prompt_io or TyperPromptIO()
     chosen_download_top = _validated_download_top(download_top)
     normalized_output_dir = output_dir.expanduser() if output_dir is not None else None
+    normalized_output = output.expanduser() if output is not None else None
 
     if not interactive and download and normalized_output_dir is None:
         raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
@@ -163,7 +164,7 @@ async def run_fetch_workflow(
     if not result.papers:
         raise ValueError("No papers found for query")
 
-    out_path = output or _auto_output_path(query, search_query.top_n)
+    out_path = normalized_output or _auto_output_path(query, search_query.top_n)
     _write_result(result, out_path)
     preview = result.papers[:10]
 
