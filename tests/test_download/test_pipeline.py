@@ -224,6 +224,37 @@ async def test_top_n_limits_papers_processed(tmp_path):
 
 
 @respx.mock
+async def test_run_download_for_result_accepts_in_memory_run_result(tmp_path):
+    papers = [
+        Paper.create(
+            title="In-Memory Download",
+            open_access_pdf_url="https://example.com/in-memory.pdf",
+            year=2024,
+            scores=ScoreBreakdown(composite=0.91),
+        ),
+    ]
+    run_result = RunResult(
+        query="in-memory query",
+        domain_category="cs_ml",
+        params=SearchQuery(query="in-memory query"),
+        sources_used=["openalex"],
+        papers=papers,
+    )
+    respx.get("https://example.com/in-memory.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+
+    from nexus_paper_fetcher.download import pipeline as download_pipeline
+
+    output_dir = tmp_path / "papers"
+    manifest = await download_pipeline.run_download_for_result(run_result, output_dir, top_n=1)
+
+    assert len(manifest.entries) == 1
+    assert manifest.entries[0].status == "success"
+    assert (output_dir / "manifest.json").exists()
+
+
+@respx.mock
 async def test_run_download_recovers_doi_only_paper_without_ezproxy(tmp_path):
     papers = [
         Paper.create(

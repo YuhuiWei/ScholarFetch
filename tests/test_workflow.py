@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import importlib
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+import typer
+
+from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
+
+
+def _make_result(
+    query: str,
+    *,
+    total_papers: int,
+    query_intent: str = "domain_search",
+) -> RunResult:
+    papers = [
+        Paper.create(
+            title=f"Paper {idx:02d}",
+            year=2020 + (idx % 5),
+            sources=["openalex"],
+        )
+        for idx in range(1, total_papers + 1)
+    ]
+    return RunResult(
+        query=query,
+        domain_category="cs_ml",
+        params=SearchQuery(query=query, top_n=50, query_intent=query_intent),
+        sources_used=["openalex"],
+        papers=papers,
+    )
+
+
+def _load_saved_result(path: Path) -> RunResult:
+    return RunResult.model_validate(json.loads(path.read_text()))
+
+
+@pytest.fixture
+def workflow_module():
+    return importlib.import_module("nexus_paper_fetcher.workflow")
+
+
+async def test_interactive_saves_full_results_and_stops_when_download_declined(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("graph transformers", total_papers=12)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="graph transformers"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock()
+    confirm_mock = Mock(return_value=False)
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
+
+    saved_results_path = tmp_path / "ranked.json"
+    await workflow_module.run_fetch_workflow(
+        query="graph transformers",
+        interactive=True,
+        output=saved_results_path,
+    )
+
+    assert saved_results_path.exists()
+    saved = _load_saved_result(saved_results_path)
+    assert len(saved.papers) == 12
+    confirm_mock.assert_called_once()
+    download_mock.assert_not_awaited()
+
+
+async def test_non_interactive_downloads_immediately_when_download_true(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("foundation models", total_papers=6)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="foundation models"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+    monkeypatch.setattr(
+        workflow_module.typer,
+        "confirm",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
+    )
+
+    await workflow_module.run_fetch_workflow(
+        query="foundation models",
+        interactive=False,
+        download=True,
+        output=tmp_path / "ranked.json",
+        output_dir=tmp_path / "papers",
+        download_top=4,
+    )
+
+    download_mock.assert_awaited_once()
+
+
+async def test_non_interactive_fails_fast_when_download_missing_required_args(
+    monkeypatch, workflow_module
+):
+    parse_mock = AsyncMock(side_effect=AssertionError("search should not run"))
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+
+    with pytest.raises((ValueError, typer.BadParameter), match="output.*dir|required"):
+        await workflow_module.run_fetch_workflow(
+            query="attention",
+            interactive=False,
+            download=True,
+        )
+
+
+async def test_workflow_prompts_before_downloading_lookup_results(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result(
+        "Attention Is All You Need",
+        total_papers=3,
+        query_intent="paper_lookup",
+    )
+    parse_mock = AsyncMock(
+        return_value=(SearchQuery(query="Attention Is All You Need", query_intent="paper_lookup"), "cs_ml")
+    )
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock()
+    confirm_mock = Mock(return_value=False)
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
+
+    await workflow_module.run_fetch_workflow(
+        query="Attention Is All You Need",
+        interactive=True,
+        output=tmp_path / "lookup.json",
+    )
+
+    confirm_mock.assert_called_once()
+    download_mock.assert_not_awaited()
+
+
+async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("single-cell transformers", total_papers=15, query_intent="domain_search")
+    parse_mock = AsyncMock(
+        return_value=(SearchQuery(query="single-cell transformers", query_intent="domain_search"), "bioinformatics")
+    )
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    confirm_mock = Mock(return_value=False)
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", AsyncMock())
+    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="single-cell transformers",
+        interactive=True,
+        output=tmp_path / "domain.json",
+    )
+
+    assert len(workflow_result.preview_papers) == 10
+    saved = _load_saved_result(tmp_path / "domain.json")
+    assert len(saved.papers) == 15

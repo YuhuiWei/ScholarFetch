@@ -1,154 +1,92 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from typer.testing import CliRunner
 
 from nexus_paper_fetcher import cli
-from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
 
 
-def _make_result(query: str) -> RunResult:
-    params = SearchQuery(query=query, top_n=3)
-    return RunResult(
-        query=query,
-        domain_category="cs_ml",
-        params=params,
-        sources_used=["openalex"],
-        papers=[Paper.create(title="Graph Transformers", year=2024, sources=["openalex"])],
+def _workflow_result(tmp_path):
+    return SimpleNamespace(
+        result=SimpleNamespace(papers=[]),
+        preview_papers=[],
+        saved_result_path=tmp_path / "result.json",
+        download_requested=False,
+        download_executed=False,
     )
 
 
-def test_fetch_command_writes_output(tmp_path, monkeypatch):
+def test_fetch_delegates_to_run_fetch_workflow(tmp_path, monkeypatch):
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
     monkeypatch.setattr(
         cli,
         "parse_natural_language_query",
-        AsyncMock(return_value=(SearchQuery(query="graph transformers", top_n=3), None)),
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
-        AsyncMock(return_value=("cs_ml", ["transformer", "attention"], "graph transformers transformer attention", "fallback", ["cs_ml"], "graph transformers", ["transformer"], ["attention"])),
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
-    run_mock = AsyncMock(return_value=_make_result("graph transformers"))
-    monkeypatch.setattr(cli, "run", run_mock)
+    monkeypatch.setattr(
+        cli,
+        "run",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
 
-    out_path = tmp_path / "result.json"
     runner = CliRunner()
     result = runner.invoke(
         cli.app,
-        ["fetch", "graph transformers", "--output", str(out_path)],
-        input="specific\n",
+        ["fetch", "graph transformers", "--output", str(tmp_path / "result.json")],
     )
 
     assert result.exit_code == 0
-    assert out_path.exists()
-    run_mock.assert_awaited_once()
-    submitted = run_mock.await_args.args[0]
-    assert submitted.keyword_count == 3
+    workflow_mock.assert_awaited_once()
+    assert workflow_mock.await_args.kwargs["query"] == "graph transformers"
 
 
-def test_fetch_command_can_override_keyword_count(tmp_path, monkeypatch):
-    parsed = SearchQuery(query="graph transformers", top_n=3)
+def test_fetch_forwards_non_interactive_download_flags(tmp_path, monkeypatch):
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
     monkeypatch.setattr(
         cli,
         "parse_natural_language_query",
-        AsyncMock(return_value=(parsed, None)),
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
-        AsyncMock(return_value=("cs_ml", ["transformer"], "graph transformers transformer", "fallback", ["cs_ml"], "graph transformers", ["transformer"], [])),
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
     )
-    run_mock = AsyncMock(return_value=_make_result("graph transformers"))
-    monkeypatch.setattr(cli, "run", run_mock)
+    monkeypatch.setattr(
+        cli,
+        "run",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
 
+    output_dir = tmp_path / "papers"
     runner = CliRunner()
     result = runner.invoke(
         cli.app,
-        ["fetch", "graph transformers", "--keyword-count", "7", "--output", str(tmp_path / "result.json")],
-        input="4\n",
+        [
+            "fetch",
+            "graph transformers",
+            "--download",
+            "--download-top",
+            "7",
+            "--output-dir",
+            str(output_dir),
+            "--yes",
+            "--output",
+            str(tmp_path / "result.json"),
+        ],
     )
 
     assert result.exit_code == 0
-    submitted = run_mock.await_args.args[0]
-    assert submitted.keyword_count == 7
-
-
-def test_fetch_command_can_disable_keyword_expansion(tmp_path, monkeypatch):
-    parsed = SearchQuery(query="graph transformers", top_n=3, keyword_count=5)
-    monkeypatch.setattr(
-        cli,
-        "parse_natural_language_query",
-        AsyncMock(return_value=(parsed, None)),
-    )
-    monkeypatch.setattr(
-        cli,
-        "prepare_query",
-        AsyncMock(return_value=("cs_ml", [], "graph transformers", "disabled", ["cs_ml"], "graph transformers", [], [])),
-    )
-    run_mock = AsyncMock(return_value=_make_result("graph transformers"))
-    monkeypatch.setattr(cli, "run", run_mock)
-
-    runner = CliRunner()
-    result = runner.invoke(
-        cli.app,
-        ["fetch", "graph transformers", "--no-keyword-expansion", "--output", str(tmp_path / "result.json")],
-    )
-
-    assert result.exit_code == 0
-    submitted = run_mock.await_args.args[0]
-    assert submitted.keyword_count == 0
-
-
-def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        cli,
-        "parse_natural_language_query",
-        AsyncMock(return_value=(SearchQuery(query="attention", top_n=3), None)),
-    )
-    monkeypatch.setattr(
-        cli,
-        "prepare_query",
-        AsyncMock(return_value=("cs_ml", ["attention"], "attention attention", "fallback", ["cs_ml"], "attention", ["attention"], [])),
-    )
-    run_mock = AsyncMock(return_value=_make_result("attention"))
-    monkeypatch.setattr(cli, "run", run_mock)
-
-    runner = CliRunner()
-    result = runner.invoke(
-        cli.app,
-        ["shell", "--output-dir", str(tmp_path)],
-        input="attention\nbroader\nquit\n",
-    )
-
-    assert result.exit_code == 0
-    assert run_mock.await_count == 1
-    assert len(list(tmp_path.glob("*.json"))) == 1
-    submitted = run_mock.await_args.args[0]
-    assert submitted.keyword_count == 8
-
-
-def test_fetch_command_accepts_broad_scope_label(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        cli,
-        "parse_natural_language_query",
-        AsyncMock(return_value=(SearchQuery(query="vision transformers", top_n=3), None)),
-    )
-    monkeypatch.setattr(
-        cli,
-        "prepare_query",
-        AsyncMock(return_value=("cs_ml", ["vision"], "vision transformers", "fallback", ["cs_ml"], "vision transformers", ["vision"], [])),
-    )
-    run_mock = AsyncMock(return_value=_make_result("vision transformers"))
-    monkeypatch.setattr(cli, "run", run_mock)
-
-    runner = CliRunner()
-    result = runner.invoke(
-        cli.app,
-        ["fetch", "vision transformers", "--output", str(tmp_path / "result.json")],
-        input="broad\n",
-    )
-
-    assert result.exit_code == 0
-    submitted = run_mock.await_args.args[0]
-    assert submitted.search_scope == "broad"
-    assert submitted.keyword_count == 8
+    workflow_mock.assert_awaited_once()
+    kwargs = workflow_mock.await_args.kwargs
+    assert kwargs["download"] is True
+    assert kwargs["download_top"] == 7
+    assert kwargs["output_dir"] == output_dir
+    assert kwargs["yes"] is True
