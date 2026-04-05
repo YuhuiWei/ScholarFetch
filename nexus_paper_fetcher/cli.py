@@ -39,12 +39,7 @@ def _write_result(result, out_path: Path) -> None:
 
 
 class _TyperPromptAdapter:
-    def __init__(self, *, force_download_confirm: bool = False) -> None:
-        self.force_download_confirm = force_download_confirm
-
     def confirm(self, text: str, *, default: bool = False) -> bool:
-        if self.force_download_confirm:
-            return True
         return typer.confirm(text, default=default)
 
     def prompt(self, text: str, *, default: Optional[str] = None) -> str:
@@ -164,7 +159,7 @@ def fetch(
             output_dir=output_dir,
             download_top=download_top,
             yes=yes,
-            prompt_io=_TyperPromptAdapter(force_download_confirm=download),
+            prompt_io=_TyperPromptAdapter(),
         )
         _print_summary(
             workflow_result.result,

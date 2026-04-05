@@ -308,15 +308,28 @@ def test_fetch_summary_reports_full_ranked_count_with_preview_rows(tmp_path, mon
     assert "[nexus] showing top 1 preview papers" in result.output
 
 
-def test_fetch_download_flag_forces_download_confirmation_opt_in(tmp_path, monkeypatch):
+def test_fetch_download_flag_does_not_install_cli_only_confirmation_override(
+    tmp_path, monkeypatch
+):
     observed = {}
+
+    class FakePromptAdapter:
+        def confirm(self, _text, *, default=False):
+            return default
+
+        def prompt(self, _text, *, default=None):
+            return default or ""
 
     async def fake_run_fetch_workflow(**kwargs):
         observed["interactive"] = kwargs["interactive"]
         observed["download"] = kwargs["download"]
-        observed["confirm_result"] = kwargs["prompt_io"].confirm("Some workflow confirmation", default=False)
+        observed["confirm_result"] = kwargs["prompt_io"].confirm(
+            "Some workflow confirmation",
+            default=False,
+        )
         return _workflow_result(tmp_path)
 
+    monkeypatch.setattr(cli, "_TyperPromptAdapter", FakePromptAdapter)
     monkeypatch.setattr(cli, "run_fetch_workflow", fake_run_fetch_workflow, raising=False)
 
     runner = CliRunner()
@@ -328,7 +341,7 @@ def test_fetch_download_flag_forces_download_confirmation_opt_in(tmp_path, monke
     assert result.exit_code == 0
     assert observed["interactive"] is True
     assert observed["download"] is True
-    assert observed["confirm_result"] is True
+    assert observed["confirm_result"] is False
 
 
 def test_fetch_non_interactive_download_requires_output_dir():
@@ -352,3 +365,17 @@ def test_fetch_download_top_must_be_positive():
 
     assert result.exit_code == 2
     assert "download-top must be a positive integer" in result.output
+
+
+def test_download_top_must_be_positive(tmp_path):
+    results_file = tmp_path / "results.json"
+    results_file.write_text("{}")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["download", str(results_file), "--top", "0"],
+    )
+
+    assert result.exit_code == 2
+    assert "top must be a positive integer" in result.output

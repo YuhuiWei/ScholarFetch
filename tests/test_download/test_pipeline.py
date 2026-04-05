@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+import typer
 from nexus_paper_fetcher.models import Paper, RunResult, ScoreBreakdown, SearchQuery
 from nexus_paper_fetcher.download.manifest import Manifest, ManifestEntry, load_manifest, save_manifest
 from nexus_paper_fetcher.download.pipeline import run_download, run_download_for_result
@@ -318,6 +319,24 @@ async def test_top_n_limits_papers_processed(tmp_path):
     assert kept.status == "success"
     assert kept.file_path is not None
     assert Path(kept.file_path).exists()
+
+
+async def test_run_download_rejects_non_positive_top_n(tmp_path):
+    with pytest.raises((ValueError, typer.BadParameter), match=r"(?i)top.*positive"):
+        await run_download(_make_results_file(tmp_path), tmp_path / "papers", top_n=0)
+
+
+async def test_run_download_for_result_rejects_non_positive_top_n(tmp_path):
+    run_result = RunResult(
+        query="in-memory query",
+        domain_category="cs_ml",
+        params=SearchQuery(query="in-memory query"),
+        sources_used=["openalex"],
+        papers=_make_default_three_papers(),
+    )
+
+    with pytest.raises((ValueError, typer.BadParameter), match=r"(?i)top.*positive"):
+        await run_download_for_result(run_result, tmp_path / "papers", top_n=0)
 
 
 @respx.mock

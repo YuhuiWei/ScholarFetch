@@ -256,6 +256,42 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
     assert kwargs["top_n"] == 6
 
 
+async def test_interactive_download_flag_skips_confirmation_and_downloads(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("graph transformers", total_papers=7, query_intent="domain_search")
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="graph transformers"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("download flag should skip confirmation")),
+        prompt=Mock(side_effect=[str(tmp_path / "papers"), "4"]),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="graph transformers",
+        interactive=True,
+        download=True,
+        output=tmp_path / "ranked.json",
+        prompt_io=prompt_io,
+    )
+
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is True
+    assert workflow_result.download_top == 4
+    assert workflow_result.output_dir == tmp_path / "papers"
+    assert prompt_io.prompt.call_count == 2
+    download_mock.assert_awaited_once()
+    assert download_mock.await_args.args[1] == tmp_path / "papers"
+    assert download_mock.await_args.kwargs["top_n"] == 4
+
+
 async def test_paper_lookup_accepts_download_and_defaults_to_all_found_results(
     tmp_path, monkeypatch, workflow_module
 ):

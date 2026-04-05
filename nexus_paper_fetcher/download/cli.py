@@ -20,6 +20,9 @@ def download_command(
     ),
     top: Optional[int] = typer.Option(None, "--top", help="Download only top N papers"),
 ) -> None:
+    if top is not None and top <= 0:
+        raise typer.BadParameter("top must be a positive integer")
+
     if not results_file.exists():
         print(f"[nexus-dl] error: file not found: {results_file}", file=sys.stderr)
         raise typer.Exit(code=1)

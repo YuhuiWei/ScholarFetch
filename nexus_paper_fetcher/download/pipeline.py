@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 import httpx
+import typer
 from nexus_paper_fetcher.models import RunResult
 from nexus_paper_fetcher.download.manifest import Manifest, load_manifest, save_manifest
 from nexus_paper_fetcher.download.downloader import resolve, ManifestEntry
@@ -18,18 +19,27 @@ def _err(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
+def _validated_top_n(top_n: Optional[int]) -> Optional[int]:
+    if top_n is None:
+        return None
+    if top_n <= 0:
+        raise typer.BadParameter("top must be a positive integer")
+    return top_n
+
+
 async def run_download(
     results_path: Path,
     output_dir: Path,
     top_n: Optional[int] = None,
 ) -> Manifest:
+    validated_top_n = _validated_top_n(top_n)
     with open(results_path) as f:
         run_result = RunResult.model_validate(json.load(f))
 
     return await run_download_for_result(
         run_result,
         output_dir,
-        top_n,
+        validated_top_n,
         source_label=str(results_path),
     )
 
@@ -106,7 +116,8 @@ async def run_download_for_result(
     *,
     source_label: Optional[str] = None,
 ) -> Manifest:
-    papers = run_result.papers[:top_n] if top_n is not None else run_result.papers
+    validated_top_n = _validated_top_n(top_n)
+    papers = run_result.papers[:validated_top_n] if validated_top_n is not None else run_result.papers
     return await _run_download_for_papers(
         papers,
         output_dir,

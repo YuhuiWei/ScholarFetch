@@ -120,7 +120,7 @@ The fetch pipeline distinguishes between two request types:
 | Mode | Behavior |
 |------|----------|
 | Paper lookup | Finds a single paper or named set of papers, ranks exact title matches first, and reports `not_found` when only approximate matches are available |
-| Domain search | Uses keyword expansion plus broad retrieval to build a ranked list in the requested area |
+| Domain search | Defaults to a specific search with 3 expansion keywords; `--keyword-count`, `--no-keyword-expansion`, or an explicit scope choice can broaden or narrow retrieval |
 
 By default, the layered evaluation stage excludes review/survey articles unless the query explicitly asks for review/survey papers.
 
@@ -217,7 +217,6 @@ async def main() -> None:
         download_top=5,
         output_dir=Path("/data/papers"),
         interactive=False,
-        yes=True,
     )
     print("Saved ranked results:", workflow_result.saved_result_path)
     print("Downloaded:", workflow_result.download_executed)

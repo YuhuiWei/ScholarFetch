@@ -174,7 +174,9 @@ async def run_fetch_workflow(
     manifest = None
 
     if interactive:
-        download_requested = prompts.confirm("Download PDFs for these results?", default=False)
+        download_requested = bool(download)
+        if not download_requested:
+            download_requested = prompts.confirm("Download PDFs for these results?", default=False)
     else:
         download_requested = bool(download)
 
