@@ -103,6 +103,11 @@ async def test_non_interactive_downloads_immediately_when_download_true(
     )
 
     download_mock.assert_awaited_once()
+    args = download_mock.await_args.args
+    kwargs = download_mock.await_args.kwargs
+    assert args[0] == result
+    assert args[1] == tmp_path / "papers"
+    assert kwargs["top_n"] == 4
 
 
 async def test_non_interactive_fails_fast_when_download_missing_required_args(
@@ -111,11 +116,15 @@ async def test_non_interactive_fails_fast_when_download_missing_required_args(
     parse_mock = AsyncMock(side_effect=AssertionError("search should not run"))
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
 
-    with pytest.raises((ValueError, typer.BadParameter), match="output.*dir|required"):
+    with pytest.raises(
+        (ValueError, typer.BadParameter),
+        match=r"(?i)output_dir.*required.*interactive\s*=\s*false",
+    ):
         await workflow_module.run_fetch_workflow(
             query="attention",
             interactive=False,
             download=True,
+            download_top=5,
         )
 
 
@@ -149,6 +158,40 @@ async def test_workflow_prompts_before_downloading_lookup_results(
 
     confirm_mock.assert_called_once()
     download_mock.assert_not_awaited()
+
+
+async def test_interactive_accepts_download_and_forwards_prompted_values(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("graph transformers", total_papers=9, query_intent="domain_search")
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="graph transformers"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    confirm_mock = Mock(return_value=True)
+    prompt_mock = Mock(side_effect=[str(tmp_path / "papers"), "6"])
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
+    monkeypatch.setattr(workflow_module.typer, "prompt", prompt_mock)
+
+    await workflow_module.run_fetch_workflow(
+        query="graph transformers",
+        interactive=True,
+        output=tmp_path / "ranked.json",
+    )
+
+    confirm_mock.assert_called_once()
+    assert prompt_mock.call_count >= 2
+    download_mock.assert_awaited_once()
+    args = download_mock.await_args.args
+    kwargs = download_mock.await_args.kwargs
+    assert args[0] == result
+    assert args[1] == tmp_path / "papers"
+    assert kwargs["top_n"] == 6
 
 
 async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(

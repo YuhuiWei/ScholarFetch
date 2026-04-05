@@ -94,6 +94,59 @@ def test_fetch_forwards_non_interactive_download_flags(tmp_path, monkeypatch):
     assert kwargs["yes"] is True
 
 
+def test_fetch_forwards_existing_fetch_controls_to_workflow(tmp_path, monkeypatch):
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
+    monkeypatch.setattr(
+        cli,
+        "parse_natural_language_query",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "prepare_query",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
+
+    out_path = tmp_path / "forwarded.json"
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        [
+            "fetch",
+            "graph transformers",
+            "--top-n",
+            "42",
+            "--year-from",
+            "2019",
+            "--year-to",
+            "2024",
+            "--author",
+            "Jane Doe",
+            "--journal",
+            "NeurIPS",
+            "--domain-category",
+            "cs_ml",
+            "--fetch-per-source",
+            "123",
+            "--output",
+            str(out_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    workflow_mock.assert_awaited_once()
+    kwargs = workflow_mock.await_args.kwargs
+    assert kwargs["top_n"] == 42
+    assert kwargs["year_from"] == 2019
+    assert kwargs["year_to"] == 2024
+    assert kwargs["author"] == "Jane Doe"
+    assert kwargs["journal"] == "NeurIPS"
+    assert kwargs["domain_category"] == "cs_ml"
+    assert kwargs["fetch_per_source"] == 123
+    assert kwargs["output"] == out_path
+
+
 def test_fetch_forwards_keyword_count_to_workflow(tmp_path, monkeypatch):
     workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
     monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
