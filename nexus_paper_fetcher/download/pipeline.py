@@ -26,7 +26,20 @@ async def run_download(
     with open(results_path) as f:
         run_result = RunResult.model_validate(json.load(f))
 
-    papers = run_result.papers[:top_n] if top_n is not None else run_result.papers
+    return await run_download_for_result(
+        run_result,
+        output_dir,
+        top_n,
+        source_label=str(results_path),
+    )
+
+
+async def _run_download_for_papers(
+    papers,
+    output_dir: Path,
+    *,
+    source_label: str,
+) -> Manifest:
     manifest_path = output_dir / "manifest.json"
     manifest = load_manifest(manifest_path)
     already_done = manifest.successful_ids()
@@ -38,7 +51,7 @@ async def run_download(
     ]
     skipped = len(papers) - len(to_download)
     _err(
-        f"[nexus-dl] loading {results_path}  ->  "
+        f"[nexus-dl] loading {source_label}  ->  "
         f"{len(papers)} papers ({skipped} already downloaded)"
     )
 
@@ -84,3 +97,18 @@ async def run_download(
         f"{skipped} skipped  ->  {manifest_path}"
     )
     return manifest
+
+
+async def run_download_for_result(
+    run_result: RunResult,
+    output_dir: Path,
+    top_n: Optional[int] = None,
+    *,
+    source_label: Optional[str] = None,
+) -> Manifest:
+    papers = run_result.papers[:top_n] if top_n is not None else run_result.papers
+    return await _run_download_for_papers(
+        papers,
+        output_dir,
+        source_label=source_label or "RunResult(in-memory)",
+    )

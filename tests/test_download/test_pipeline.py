@@ -6,7 +6,7 @@ import pytest
 import respx
 from nexus_paper_fetcher.models import Paper, RunResult, ScoreBreakdown, SearchQuery
 from nexus_paper_fetcher.download.manifest import Manifest, ManifestEntry, load_manifest, save_manifest
-from nexus_paper_fetcher.download.pipeline import run_download
+from nexus_paper_fetcher.download.pipeline import run_download, run_download_for_result
 from tests.test_download.constants import FAKE_PDF
 
 
@@ -313,10 +313,8 @@ async def test_run_download_for_result_accepts_in_memory_run_result(tmp_path):
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
 
-    from nexus_paper_fetcher.download import pipeline as download_pipeline
-
     output_dir = tmp_path / "papers"
-    manifest = await download_pipeline.run_download_for_result(run_result, output_dir, top_n=1)
+    manifest = await run_download_for_result(run_result, output_dir, top_n=1)
 
     assert len(manifest.entries) == 1
     assert manifest.entries[0].status == "success"
