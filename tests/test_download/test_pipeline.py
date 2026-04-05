@@ -294,14 +294,7 @@ async def test_top_n_limits_papers_processed(tmp_path):
 
 @respx.mock
 async def test_run_download_for_result_accepts_in_memory_run_result(tmp_path):
-    papers = [
-        Paper.create(
-            title="In-Memory Download",
-            open_access_pdf_url="https://example.com/in-memory.pdf",
-            year=2024,
-            scores=ScoreBreakdown(composite=0.91),
-        ),
-    ]
+    papers = _make_default_three_papers()
     run_result = RunResult(
         query="in-memory query",
         domain_category="cs_ml",
@@ -309,16 +302,96 @@ async def test_run_download_for_result_accepts_in_memory_run_result(tmp_path):
         sources_used=["openalex"],
         papers=papers,
     )
-    respx.get("https://example.com/in-memory.pdf").mock(
-        return_value=httpx.Response(200, content=FAKE_PDF)
-    )
+    _mock_default_three_paper_routes()
 
     output_dir = tmp_path / "papers"
     manifest = await run_download_for_result(run_result, output_dir, top_n=1)
 
     assert len(manifest.entries) == 1
-    assert manifest.entries[0].status == "success"
+    kept = manifest.entries[0]
+    assert kept.paper_id == papers[0].paper_id
+    assert kept.rank == 1
+    assert kept.title == papers[0].title
+    assert kept.score == pytest.approx(0.9)
+    assert kept.status == "success"
+    assert kept.source_used == "open_access_url"
+    assert kept.file_path is not None
+    assert Path(kept.file_path).exists()
     assert (output_dir / "manifest.json").exists()
+
+
+@respx.mock
+async def test_run_download_for_result_rerun_skips_existing_success_entries(tmp_path):
+    papers = [
+        Paper.create(
+            title="Paper One Open Access",
+            open_access_pdf_url="https://example.com/p1.pdf",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.9),
+        ),
+        Paper.create(
+            title="Paper Two DOI to Arxiv",
+            doi="10.5555/p2",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.8),
+        ),
+    ]
+    run_result = RunResult(
+        query="in-memory rerun",
+        domain_category="cs_ml",
+        params=SearchQuery(query="in-memory rerun"),
+        sources_used=["openalex"],
+        papers=papers,
+    )
+    output_dir = tmp_path / "papers"
+    output_dir.mkdir()
+
+    save_manifest(
+        Manifest(entries=[
+            ManifestEntry(
+                paper_id=papers[0].paper_id,
+                title=papers[0].title,
+                rank=1,
+                score=0.9,
+                status="success",
+                source_used="open_access_url",
+                file_path=str(output_dir / "rank_01_paper_one_open_access.pdf"),
+                file_size_kb=100,
+            )
+        ]),
+        output_dir / "manifest.json",
+    )
+
+    open_access_route = respx.get("https://example.com/p1.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    arxiv_query_route = respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2201.00001v1</id>
+    <arxiv:doi>10.5555/p2</arxiv:doi>
+  </entry>
+</feed>""",
+        )
+    )
+    arxiv_pdf_route = respx.get("https://arxiv.org/pdf/2201.00001v1.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+
+    manifest = await run_download_for_result(run_result, output_dir)
+
+    assert len(manifest.entries) == 2
+    by_paper = {entry.paper_id: entry for entry in manifest.entries}
+    assert set(by_paper) == {papers[0].paper_id, papers[1].paper_id}
+    assert by_paper[papers[0].paper_id].status == "success"
+    assert by_paper[papers[1].paper_id].status == "success"
+    assert open_access_route.call_count == 0
+    assert arxiv_query_route.call_count == 1
+    assert arxiv_pdf_route.call_count == 1
 
 
 @respx.mock
@@ -443,31 +516,7 @@ def test_cli_download_command(tmp_path):
     from typer.testing import CliRunner
     from nexus_paper_fetcher.cli import app
 
-    respx.get("https://example.com/p1.pdf").mock(
-        return_value=httpx.Response(200, content=FAKE_PDF)
-    )
-    respx.get("https://export.arxiv.org/api/query").mock(
-        side_effect=lambda request: httpx.Response(
-            200,
-            text="""<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:arxiv="http://arxiv.org/schemas/atom">
-  <entry>
-    <id>http://arxiv.org/abs/2201.00001v1</id>
-    <arxiv:doi>10.5555/p2</arxiv:doi>
-  </entry>
-</feed>"""
-            if "10.5555/p2" in request.url.params.get("search_query", "")
-            else """<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
-        )
-    )
-    respx.get("https://arxiv.org/pdf/2201.00001v1.pdf").mock(
-        return_value=httpx.Response(200, content=FAKE_PDF)
-    )
-    respx.get("https://api.unpaywall.org/v2/10.1234/nope").mock(
-        return_value=httpx.Response(404, json={})
-    )
+    _mock_default_three_paper_routes()
 
     results_path = _make_results_file(tmp_path)
     output_dir = tmp_path / "papers"
