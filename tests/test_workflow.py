@@ -61,7 +61,7 @@ async def test_interactive_saves_full_results_and_stops_when_download_declined(
     monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
 
     saved_results_path = tmp_path / "ranked.json"
-    await workflow_module.run_fetch_workflow(
+    workflow_result = await workflow_module.run_fetch_workflow(
         query="graph transformers",
         interactive=True,
         output=saved_results_path,
@@ -70,6 +70,10 @@ async def test_interactive_saves_full_results_and_stops_when_download_declined(
     assert saved_results_path.exists()
     saved = _load_saved_result(saved_results_path)
     assert len(saved.papers) == 12
+    assert workflow_result.saved_result_path == saved_results_path
+    assert workflow_result.download_requested is False
+    assert workflow_result.download_executed is False
+    assert getattr(workflow_result, "download_manifest", None) is None
     confirm_mock.assert_called_once()
     download_mock.assert_not_awaited()
 
@@ -93,7 +97,7 @@ async def test_non_interactive_downloads_immediately_when_download_true(
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
     )
 
-    await workflow_module.run_fetch_workflow(
+    workflow_result = await workflow_module.run_fetch_workflow(
         query="foundation models",
         interactive=False,
         download=True,
@@ -104,6 +108,12 @@ async def test_non_interactive_downloads_immediately_when_download_true(
 
     saved = _load_saved_result(tmp_path / "ranked.json")
     assert len(saved.papers) == 6
+    assert workflow_result.saved_result_path == tmp_path / "ranked.json"
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is True
+    assert workflow_result.download_top == 4
+    assert workflow_result.output_dir == tmp_path / "papers"
+    assert workflow_result.download_manifest is not None
     download_mock.assert_awaited_once()
     args = download_mock.await_args.args
     kwargs = download_mock.await_args.kwargs
@@ -152,12 +162,15 @@ async def test_workflow_prompts_before_downloading_lookup_results(
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
     monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
 
-    await workflow_module.run_fetch_workflow(
+    workflow_result = await workflow_module.run_fetch_workflow(
         query="Attention Is All You Need",
         interactive=True,
         output=tmp_path / "lookup.json",
     )
 
+    assert workflow_result.saved_result_path == tmp_path / "lookup.json"
+    assert workflow_result.download_requested is False
+    assert workflow_result.download_executed is False
     confirm_mock.assert_called_once()
     download_mock.assert_not_awaited()
 
@@ -170,8 +183,20 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
     prepare_mock = AsyncMock(return_value=SimpleNamespace())
     run_mock = AsyncMock(return_value=result)
     download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
-    confirm_mock = Mock(return_value=True)
-    prompt_mock = Mock(side_effect=[str(tmp_path / "papers"), "6"])
+    call_order: list[str] = []
+
+    def _confirm(*_args, **_kwargs):
+        call_order.append("confirm")
+        return True
+
+    def _prompt(*_args, **_kwargs):
+        call_order.append("prompt")
+        if call_order.count("prompt") == 1:
+            return str(tmp_path / "papers")
+        return "6"
+
+    confirm_mock = Mock(side_effect=_confirm)
+    prompt_mock = Mock(side_effect=_prompt)
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
@@ -180,7 +205,7 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
     monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
     monkeypatch.setattr(workflow_module.typer, "prompt", prompt_mock)
 
-    await workflow_module.run_fetch_workflow(
+    workflow_result = await workflow_module.run_fetch_workflow(
         query="graph transformers",
         interactive=True,
         output=tmp_path / "ranked.json",
@@ -188,8 +213,15 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
 
     saved = _load_saved_result(tmp_path / "ranked.json")
     assert len(saved.papers) == 9
+    assert workflow_result.saved_result_path == tmp_path / "ranked.json"
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is True
+    assert workflow_result.download_top == 6
+    assert workflow_result.output_dir == tmp_path / "papers"
+    assert workflow_result.download_manifest is not None
     confirm_mock.assert_called_once()
     assert prompt_mock.call_count == 2
+    assert call_order == ["confirm", "prompt", "prompt"]
     first_prompt_text = prompt_mock.call_args_list[0].args[0].lower()
     second_prompt_text = prompt_mock.call_args_list[1].args[0].lower()
     assert "directory" in first_prompt_text or "output" in first_prompt_text
@@ -200,6 +232,46 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
     assert args[0] == result
     assert args[1] == tmp_path / "papers"
     assert kwargs["top_n"] == 6
+
+
+async def test_paper_lookup_accepts_download_and_defaults_to_all_found_results(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("Attention Is All You Need", total_papers=3, query_intent="paper_lookup")
+    parse_mock = AsyncMock(
+        return_value=(SearchQuery(query="Attention Is All You Need", query_intent="paper_lookup"), "cs_ml")
+    )
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    confirm_mock = Mock(return_value=True)
+    prompt_mock = Mock(side_effect=[str(tmp_path / "papers"), ""])
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
+    monkeypatch.setattr(workflow_module.typer, "prompt", prompt_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="Attention Is All You Need",
+        interactive=True,
+        output=tmp_path / "lookup.json",
+    )
+
+    assert workflow_result.saved_result_path == tmp_path / "lookup.json"
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is True
+    assert workflow_result.output_dir == tmp_path / "papers"
+    assert workflow_result.download_top == 3
+    assert workflow_result.download_manifest is not None
+    download_mock.assert_awaited_once()
+    args = download_mock.await_args.args
+    kwargs = download_mock.await_args.kwargs
+    assert args[0] == result
+    assert args[1] == tmp_path / "papers"
+    assert kwargs["top_n"] == 3
 
 
 async def test_empty_search_result_fails_before_prompting_or_downloading(
@@ -257,5 +329,8 @@ async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(
     assert [paper.paper_id for paper in workflow_result.preview_papers] == [
         paper.paper_id for paper in result.papers[:10]
     ]
+    assert workflow_result.saved_result_path == tmp_path / "domain.json"
+    assert workflow_result.download_requested is False
+    assert workflow_result.download_executed is False
     saved = _load_saved_result(tmp_path / "domain.json")
     assert len(saved.papers) == 15
