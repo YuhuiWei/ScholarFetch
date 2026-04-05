@@ -78,6 +78,33 @@ def _make_results_file(tmp_path: Path, papers: list[Paper] | None = None) -> Pat
     return path
 
 
+def _entry_by_paper_id(manifest: Manifest) -> dict[str, ManifestEntry]:
+    return {entry.paper_id: entry for entry in manifest.entries}
+
+
+def _assert_success_entry_metadata(
+    entry: ManifestEntry,
+    paper: Paper,
+    *,
+    rank: int,
+    score: float,
+    source_used: str,
+    output_dir: Path,
+    suffix: str = ".pdf",
+) -> None:
+    assert entry.paper_id == paper.paper_id
+    assert entry.title == paper.title
+    assert entry.rank == rank
+    assert entry.score == pytest.approx(score)
+    assert entry.status == "success"
+    assert entry.source_used == source_used
+    assert entry.file_path is not None
+    file_path = Path(entry.file_path)
+    assert file_path.parent == output_dir
+    assert file_path.suffix == suffix
+    assert file_path.exists()
+
+
 @respx.mock
 async def test_full_run_produces_correct_manifest(tmp_path):
     papers = _make_default_three_papers()
@@ -308,16 +335,26 @@ async def test_run_download_for_result_accepts_in_memory_run_result(tmp_path):
     manifest = await run_download_for_result(run_result, output_dir, top_n=1)
 
     assert len(manifest.entries) == 1
-    kept = manifest.entries[0]
-    assert kept.paper_id == papers[0].paper_id
-    assert kept.rank == 1
-    assert kept.title == papers[0].title
-    assert kept.score == pytest.approx(0.9)
-    assert kept.status == "success"
-    assert kept.source_used == "open_access_url"
-    assert kept.file_path is not None
-    assert Path(kept.file_path).exists()
-    assert (output_dir / "manifest.json").exists()
+    _assert_success_entry_metadata(
+        manifest.entries[0],
+        papers[0],
+        rank=1,
+        score=0.9,
+        source_used="open_access_url",
+        output_dir=output_dir,
+    )
+    saved = load_manifest(output_dir / "manifest.json")
+    assert len(saved.entries) == 1
+    saved_entry = saved.entries[0]
+    _assert_success_entry_metadata(
+        saved_entry,
+        papers[0],
+        rank=1,
+        score=0.9,
+        source_used="open_access_url",
+        output_dir=output_dir,
+    )
+    assert saved_entry.model_dump() == manifest.entries[0].model_dump()
 
 
 @respx.mock
@@ -385,10 +422,31 @@ async def test_run_download_for_result_rerun_skips_existing_success_entries(tmp_
     manifest = await run_download_for_result(run_result, output_dir)
 
     assert len(manifest.entries) == 2
-    by_paper = {entry.paper_id: entry for entry in manifest.entries}
+    by_paper = _entry_by_paper_id(manifest)
     assert set(by_paper) == {papers[0].paper_id, papers[1].paper_id}
     assert by_paper[papers[0].paper_id].status == "success"
-    assert by_paper[papers[1].paper_id].status == "success"
+    _assert_success_entry_metadata(
+        by_paper[papers[1].paper_id],
+        papers[1],
+        rank=2,
+        score=0.8,
+        source_used="arxiv",
+        output_dir=output_dir,
+    )
+    saved = load_manifest(output_dir / "manifest.json")
+    assert len(saved.entries) == 2
+    saved_by_paper = _entry_by_paper_id(saved)
+    assert saved_by_paper[papers[0].paper_id].status == "success"
+    _assert_success_entry_metadata(
+        saved_by_paper[papers[1].paper_id],
+        papers[1],
+        rank=2,
+        score=0.8,
+        source_used="arxiv",
+        output_dir=output_dir,
+    )
+    assert saved_by_paper[papers[0].paper_id].model_dump() == by_paper[papers[0].paper_id].model_dump()
+    assert saved_by_paper[papers[1].paper_id].model_dump() == by_paper[papers[1].paper_id].model_dump()
     assert open_access_route.call_count == 0
     assert arxiv_query_route.call_count == 1
     assert arxiv_pdf_route.call_count == 1
