@@ -133,8 +133,9 @@ async def run_fetch_workflow(
 ) -> FetchWorkflowResult:
     prompts = prompt_io or TyperPromptIO()
     chosen_download_top = _validated_download_top(download_top)
+    normalized_output_dir = output_dir.expanduser() if output_dir is not None else None
 
-    if not interactive and download and output_dir is None:
+    if not interactive and download and normalized_output_dir is None:
         raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
 
     search_query, parsed_domain = await parse_natural_language_query(query)
@@ -168,7 +169,7 @@ async def run_fetch_workflow(
 
     download_requested = False
     download_executed = False
-    chosen_output_dir = output_dir
+    chosen_output_dir = normalized_output_dir
     manifest = None
 
     if interactive:
@@ -187,7 +188,13 @@ async def run_fetch_workflow(
                 raw_top = prompts.prompt("How many top papers to download? (blank = all found)", default="")
                 stripped = raw_top.strip()
                 if stripped:
-                    chosen_download_top = _validated_download_top(int(stripped))
+                    try:
+                        parsed_top = int(stripped)
+                    except ValueError as exc:
+                        raise typer.BadParameter(
+                            "download-top must be a positive integer"
+                        ) from exc
+                    chosen_download_top = _validated_download_top(parsed_top)
                 else:
                     chosen_download_top = len(result.papers)
             else:

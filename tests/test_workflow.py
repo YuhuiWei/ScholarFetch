@@ -532,3 +532,65 @@ async def test_interactive_rejects_non_positive_prompted_download_top(
         )
 
     download_mock.assert_not_awaited()
+
+
+async def test_interactive_rejects_non_numeric_prompted_download_top(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("prompted non numeric top", total_papers=5)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="prompted non numeric top"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(side_effect=AssertionError("download should not run"))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(return_value=True),
+        prompt=Mock(side_effect=[str(tmp_path / "papers"), "abc"]),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    with pytest.raises((ValueError, typer.BadParameter), match=r"(?i)download.*top.*integer"):
+        await workflow_module.run_fetch_workflow(
+            query="prompted non numeric top",
+            interactive=True,
+            output=tmp_path / "ranked.json",
+            prompt_io=prompt_io,
+        )
+
+    download_mock.assert_not_awaited()
+
+
+async def test_non_interactive_expands_explicit_output_dir(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("explicit output dir", total_papers=2)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="explicit output dir"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("unexpected confirm")),
+        prompt=Mock(side_effect=AssertionError("unexpected prompt")),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="explicit output dir",
+        interactive=False,
+        download=True,
+        output=tmp_path / "ranked.json",
+        output_dir=Path("~/papers"),
+        download_top=1,
+        prompt_io=prompt_io,
+    )
+
+    expected_output_dir = Path("~/papers").expanduser()
+    assert workflow_result.output_dir == expected_output_dir
+    assert download_mock.await_args.args[1] == expected_output_dir
