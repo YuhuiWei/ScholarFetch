@@ -373,3 +373,60 @@ async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(
     saved = _load_saved_result(tmp_path / "domain.json")
     assert len(saved.papers) == 15
     assert [paper.paper_id for paper in saved.papers] == [paper.paper_id for paper in result.papers]
+
+
+async def test_keyword_strategy_defaults_to_specific_without_scope_prompt(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("vision transformers", total_papers=5, query_intent="domain_search")
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="vision transformers"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", AsyncMock())
+    monkeypatch.setattr(workflow_module.typer, "confirm", Mock(return_value=False))
+    monkeypatch.setattr(
+        workflow_module.typer,
+        "prompt",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
+    )
+
+    await workflow_module.run_fetch_workflow(
+        query="vision transformers",
+        interactive=True,
+        output=tmp_path / "ranked.json",
+    )
+
+    prepared_query = prepare_mock.await_args.args[0]
+    assert prepared_query.search_scope == "specific"
+    assert prepared_query.keyword_count == 3
+
+
+async def test_keyword_strategy_honors_cli_overrides(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("vision transformers", total_papers=5, query_intent="domain_search")
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="vision transformers", keyword_count=8), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", AsyncMock())
+    monkeypatch.setattr(workflow_module.typer, "confirm", Mock(return_value=False))
+
+    await workflow_module.run_fetch_workflow(
+        query="vision transformers",
+        interactive=True,
+        output=tmp_path / "ranked.json",
+        keyword_count=2,
+        no_keyword_expansion=True,
+    )
+
+    prepared_query = prepare_mock.await_args.args[0]
+    assert prepared_query.search_scope == "specific"
+    assert prepared_query.keyword_count == 0
