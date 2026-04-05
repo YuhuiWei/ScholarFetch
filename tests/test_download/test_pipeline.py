@@ -105,6 +105,56 @@ def _assert_success_entry_metadata(
     assert file_path.exists()
 
 
+def _setup_rerun_skip_fixture(tmp_path: Path):
+    papers = [
+        Paper.create(
+            title="Paper One Open Access",
+            open_access_pdf_url="https://example.com/p1.pdf",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.9),
+        ),
+        Paper.create(
+            title="Paper Two DOI to Arxiv",
+            doi="10.5555/p2",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.8),
+        ),
+    ]
+    output_dir = tmp_path / "papers"
+    output_dir.mkdir()
+    existing_entry = ManifestEntry(
+        paper_id=papers[0].paper_id,
+        title=papers[0].title,
+        rank=1,
+        score=0.9,
+        status="success",
+        source_used="open_access_url",
+        file_path=str(output_dir / "rank_01_paper_one_open_access.pdf"),
+        file_size_kb=100,
+    )
+    save_manifest(Manifest(entries=[existing_entry]), output_dir / "manifest.json")
+    open_access_route = respx.get("https://example.com/p1.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    arxiv_query_route = respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2201.00001v1</id>
+    <arxiv:doi>10.5555/p2</arxiv:doi>
+  </entry>
+</feed>""",
+        )
+    )
+    arxiv_pdf_route = respx.get("https://arxiv.org/pdf/2201.00001v1.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    return papers, output_dir, existing_entry, open_access_route, arxiv_query_route, arxiv_pdf_route
+
+
 @respx.mock
 async def test_full_run_produces_correct_manifest(tmp_path):
     papers = _make_default_three_papers()
@@ -174,57 +224,8 @@ async def test_manifest_written_to_disk(tmp_path):
 
 @respx.mock
 async def test_rerun_skips_successful_paper(tmp_path):
-    papers = [
-        Paper.create(
-            title="Paper One Open Access",
-            open_access_pdf_url="https://example.com/p1.pdf",
-            year=2022,
-            scores=ScoreBreakdown(composite=0.9),
-        ),
-        Paper.create(
-            title="Paper Two DOI to Arxiv",
-            doi="10.5555/p2",
-            year=2022,
-            scores=ScoreBreakdown(composite=0.8),
-        ),
-    ]
-    output_dir = tmp_path / "papers"
-    output_dir.mkdir()
-
-    # Pre-populate manifest: paper 1 already done
-    existing = Manifest(entries=[
-        ManifestEntry(
-            paper_id=papers[0].paper_id,
-            title=papers[0].title,
-            rank=1,
-            score=0.9,
-            status="success",
-            source_used="open_access_url",
-            file_path=str(output_dir / "rank_01_paper_one_open_access.pdf"),
-            file_size_kb=100,
-        )
-    ])
-    save_manifest(existing, output_dir / "manifest.json")
-
-    # Only paper 2 should be downloaded
-    open_access_route = respx.get("https://example.com/p1.pdf").mock(
-        return_value=httpx.Response(200, content=FAKE_PDF)
-    )
-    arxiv_query_route = respx.get("https://export.arxiv.org/api/query").mock(
-        return_value=httpx.Response(
-            200,
-            text="""<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:arxiv="http://arxiv.org/schemas/atom">
-  <entry>
-    <id>http://arxiv.org/abs/2201.00001v1</id>
-    <arxiv:doi>10.5555/p2</arxiv:doi>
-  </entry>
-</feed>""",
-        )
-    )
-    arxiv_pdf_route = respx.get("https://arxiv.org/pdf/2201.00001v1.pdf").mock(
-        return_value=httpx.Response(200, content=FAKE_PDF)
+    papers, output_dir, _, open_access_route, arxiv_query_route, arxiv_pdf_route = (
+        _setup_rerun_skip_fixture(tmp_path)
     )
 
     manifest = await run_download(
@@ -359,64 +360,15 @@ async def test_run_download_for_result_accepts_in_memory_run_result(tmp_path):
 
 @respx.mock
 async def test_run_download_for_result_rerun_skips_existing_success_entries(tmp_path):
-    papers = [
-        Paper.create(
-            title="Paper One Open Access",
-            open_access_pdf_url="https://example.com/p1.pdf",
-            year=2022,
-            scores=ScoreBreakdown(composite=0.9),
-        ),
-        Paper.create(
-            title="Paper Two DOI to Arxiv",
-            doi="10.5555/p2",
-            year=2022,
-            scores=ScoreBreakdown(composite=0.8),
-        ),
-    ]
+    papers, output_dir, existing_entry, open_access_route, arxiv_query_route, arxiv_pdf_route = (
+        _setup_rerun_skip_fixture(tmp_path)
+    )
     run_result = RunResult(
         query="in-memory rerun",
         domain_category="cs_ml",
         params=SearchQuery(query="in-memory rerun"),
         sources_used=["openalex"],
         papers=papers,
-    )
-    output_dir = tmp_path / "papers"
-    output_dir.mkdir()
-
-    save_manifest(
-        Manifest(entries=[
-            ManifestEntry(
-                paper_id=papers[0].paper_id,
-                title=papers[0].title,
-                rank=1,
-                score=0.9,
-                status="success",
-                source_used="open_access_url",
-                file_path=str(output_dir / "rank_01_paper_one_open_access.pdf"),
-                file_size_kb=100,
-            )
-        ]),
-        output_dir / "manifest.json",
-    )
-
-    open_access_route = respx.get("https://example.com/p1.pdf").mock(
-        return_value=httpx.Response(200, content=FAKE_PDF)
-    )
-    arxiv_query_route = respx.get("https://export.arxiv.org/api/query").mock(
-        return_value=httpx.Response(
-            200,
-            text="""<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:arxiv="http://arxiv.org/schemas/atom">
-  <entry>
-    <id>http://arxiv.org/abs/2201.00001v1</id>
-    <arxiv:doi>10.5555/p2</arxiv:doi>
-  </entry>
-</feed>""",
-        )
-    )
-    arxiv_pdf_route = respx.get("https://arxiv.org/pdf/2201.00001v1.pdf").mock(
-        return_value=httpx.Response(200, content=FAKE_PDF)
     )
 
     manifest = await run_download_for_result(run_result, output_dir)
@@ -436,7 +388,18 @@ async def test_run_download_for_result_rerun_skips_existing_success_entries(tmp_
     saved = load_manifest(output_dir / "manifest.json")
     assert len(saved.entries) == 2
     saved_by_paper = _entry_by_paper_id(saved)
-    assert saved_by_paper[papers[0].paper_id].status == "success"
+    skipped = by_paper[papers[0].paper_id]
+    saved_skipped = saved_by_paper[papers[0].paper_id]
+    assert skipped.paper_id == existing_entry.paper_id
+    assert skipped.title == existing_entry.title
+    assert skipped.rank == existing_entry.rank
+    assert skipped.score == pytest.approx(existing_entry.score)
+    assert skipped.status == existing_entry.status
+    assert skipped.source_used == existing_entry.source_used
+    assert skipped.file_path == existing_entry.file_path
+    assert skipped.file_size_kb == existing_entry.file_size_kb
+    assert skipped.error == existing_entry.error
+    assert saved_skipped.model_dump() == existing_entry.model_dump()
     _assert_success_entry_metadata(
         saved_by_paper[papers[1].paper_id],
         papers[1],
