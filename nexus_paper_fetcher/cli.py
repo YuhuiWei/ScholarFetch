@@ -43,7 +43,7 @@ class _TyperPromptAdapter:
         self.force_download_confirm = force_download_confirm
 
     def confirm(self, text: str, *, default: bool = False) -> bool:
-        if self.force_download_confirm and text.strip() == "Download PDFs for these results?":
+        if self.force_download_confirm:
             return True
         return typer.confirm(text, default=default)
 

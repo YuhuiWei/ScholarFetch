@@ -309,11 +309,15 @@ def test_fetch_summary_reports_full_ranked_count_with_preview_rows(tmp_path, mon
 
 
 def test_fetch_download_flag_forces_download_confirmation_opt_in(tmp_path, monkeypatch):
-    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
-    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
+    observed = {}
 
-    confirm_mock = Mock(return_value=False)
-    monkeypatch.setattr(cli.typer, "confirm", confirm_mock)
+    async def fake_run_fetch_workflow(**kwargs):
+        observed["interactive"] = kwargs["interactive"]
+        observed["download"] = kwargs["download"]
+        observed["confirm_result"] = kwargs["prompt_io"].confirm("Some workflow confirmation", default=False)
+        return _workflow_result(tmp_path)
+
+    monkeypatch.setattr(cli, "run_fetch_workflow", fake_run_fetch_workflow, raising=False)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -322,7 +326,29 @@ def test_fetch_download_flag_forces_download_confirmation_opt_in(tmp_path, monke
     )
 
     assert result.exit_code == 0
-    workflow_mock.assert_awaited_once()
-    prompt_io = workflow_mock.await_args.kwargs["prompt_io"]
-    assert prompt_io.confirm("Download PDFs for these results?") is True
-    confirm_mock.assert_not_called()
+    assert observed["interactive"] is True
+    assert observed["download"] is True
+    assert observed["confirm_result"] is True
+
+
+def test_fetch_non_interactive_download_requires_output_dir():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["fetch", "attention", "--yes", "--download"],
+    )
+
+    assert result.exit_code == 2
+    assert "output-dir is required when download is enabled in" in result.output
+    assert "non-interactive mode" in result.output
+
+
+def test_fetch_download_top_must_be_positive():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["fetch", "attention", "--download-top", "0"],
+    )
+
+    assert result.exit_code == 2
+    assert "download-top must be a positive integer" in result.output
