@@ -69,7 +69,6 @@ def _apply_keyword_strategy(
     *,
     cli_keyword_count: Optional[int],
     no_keyword_expansion: bool,
-    prompt_io: PromptIO,
 ) -> None:
     if search_query.query_intent == "paper_lookup":
         search_query.search_scope = "specific"
@@ -104,6 +103,14 @@ def _apply_keyword_strategy(
     search_query.keyword_count = _keyword_count_from_scope(search_query.search_scope)
 
 
+def _validated_download_top(value: Optional[int]) -> Optional[int]:
+    if value is None:
+        return None
+    if value <= 0:
+        raise typer.BadParameter("download-top must be a positive integer")
+    return value
+
+
 async def run_fetch_workflow(
     *,
     query: str,
@@ -125,6 +132,7 @@ async def run_fetch_workflow(
     prompt_io: Optional[PromptIO] = None,
 ) -> FetchWorkflowResult:
     prompts = prompt_io or TyperPromptIO()
+    chosen_download_top = _validated_download_top(download_top)
 
     if not interactive and download and output_dir is None:
         raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
@@ -145,7 +153,6 @@ async def run_fetch_workflow(
         search_query,
         cli_keyword_count=keyword_count,
         no_keyword_expansion=no_keyword_expansion,
-        prompt_io=prompts,
     )
 
     domain_override = domain_category or parsed_domain
@@ -162,22 +169,29 @@ async def run_fetch_workflow(
     download_requested = False
     download_executed = False
     chosen_output_dir = output_dir
-    chosen_download_top = download_top
     manifest = None
 
-    if interactive and not yes:
+    if interactive:
         download_requested = prompts.confirm("Download PDFs for these results?", default=False)
     else:
-        download_requested = bool(download or yes)
+        download_requested = bool(download)
 
     if download_requested:
-        if chosen_output_dir is None:
+        if interactive and chosen_output_dir is None:
             chosen_output_dir = Path(prompts.prompt("Download output directory", default="papers")).expanduser()
+        if chosen_output_dir is None:
+            raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
 
         if chosen_download_top is None:
-            raw_top = prompts.prompt("How many top papers to download? (blank = all found)", default="")
-            stripped = raw_top.strip()
-            chosen_download_top = int(stripped) if stripped else len(result.papers)
+            if interactive:
+                raw_top = prompts.prompt("How many top papers to download? (blank = all found)", default="")
+                stripped = raw_top.strip()
+                if stripped:
+                    chosen_download_top = _validated_download_top(int(stripped))
+                else:
+                    chosen_download_top = len(result.papers)
+            else:
+                chosen_download_top = len(result.papers)
 
         manifest = await run_download_for_result(
             result,

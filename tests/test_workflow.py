@@ -53,23 +53,20 @@ async def test_interactive_saves_full_results_and_stops_when_download_declined(
     run_mock = AsyncMock(return_value=result)
     download_mock = AsyncMock()
     confirm_mock = Mock(return_value=False)
+    prompt_mock = Mock(side_effect=AssertionError("unexpected prompt"))
+    prompt_io = SimpleNamespace(confirm=confirm_mock, prompt=prompt_mock)
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
-    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
-    monkeypatch.setattr(
-        workflow_module.typer,
-        "prompt",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
-    )
 
     saved_results_path = tmp_path / "ranked.json"
     workflow_result = await workflow_module.run_fetch_workflow(
         query="graph transformers",
         interactive=True,
         output=saved_results_path,
+        prompt_io=prompt_io,
     )
 
     assert saved_results_path.exists()
@@ -101,21 +98,15 @@ async def test_non_interactive_downloads_immediately_when_download_true(
     prepare_mock = AsyncMock(return_value=SimpleNamespace())
     run_mock = AsyncMock(return_value=result)
     download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("unexpected prompt")),
+        prompt=Mock(side_effect=AssertionError("unexpected prompt")),
+    )
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
-    monkeypatch.setattr(
-        workflow_module.typer,
-        "confirm",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
-    )
-    monkeypatch.setattr(
-        workflow_module.typer,
-        "prompt",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
-    )
 
     workflow_result = await workflow_module.run_fetch_workflow(
         query="foundation models",
@@ -124,6 +115,7 @@ async def test_non_interactive_downloads_immediately_when_download_true(
         output=tmp_path / "ranked.json",
         output_dir=tmp_path / "papers",
         download_top=4,
+        prompt_io=prompt_io,
     )
 
     saved = _load_saved_result(tmp_path / "ranked.json")
@@ -184,17 +176,18 @@ async def test_workflow_prompts_before_downloading_lookup_results(
     run_mock = AsyncMock(return_value=result)
     download_mock = AsyncMock()
     confirm_mock = Mock(return_value=False)
+    prompt_io = SimpleNamespace(confirm=confirm_mock, prompt=Mock())
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
-    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
 
     workflow_result = await workflow_module.run_fetch_workflow(
         query="Attention Is All You Need",
         interactive=True,
         output=tmp_path / "lookup.json",
+        prompt_io=prompt_io,
     )
 
     assert workflow_result.saved_result_path == tmp_path / "lookup.json"
@@ -226,18 +219,18 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
 
     confirm_mock = Mock(side_effect=_confirm)
     prompt_mock = Mock(side_effect=_prompt)
+    prompt_io = SimpleNamespace(confirm=confirm_mock, prompt=prompt_mock)
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
-    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
-    monkeypatch.setattr(workflow_module.typer, "prompt", prompt_mock)
 
     workflow_result = await workflow_module.run_fetch_workflow(
         query="graph transformers",
         interactive=True,
         output=tmp_path / "ranked.json",
+        prompt_io=prompt_io,
     )
 
     saved = _load_saved_result(tmp_path / "ranked.json")
@@ -275,18 +268,18 @@ async def test_paper_lookup_accepts_download_and_defaults_to_all_found_results(
     download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
     confirm_mock = Mock(return_value=True)
     prompt_mock = Mock(side_effect=[str(tmp_path / "papers"), ""])
+    prompt_io = SimpleNamespace(confirm=confirm_mock, prompt=prompt_mock)
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
-    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
-    monkeypatch.setattr(workflow_module.typer, "prompt", prompt_mock)
 
     workflow_result = await workflow_module.run_fetch_workflow(
         query="Attention Is All You Need",
         interactive=True,
         output=tmp_path / "lookup.json",
+        prompt_io=prompt_io,
     )
 
     assert workflow_result.saved_result_path == tmp_path / "lookup.json"
@@ -312,13 +305,12 @@ async def test_empty_search_result_fails_before_prompting_or_downloading(
     run_mock = AsyncMock(return_value=empty_result)
     confirm_mock = Mock(side_effect=AssertionError("should not prompt on empty results"))
     prompt_mock = Mock(side_effect=AssertionError("should not prompt on empty results"))
+    prompt_io = SimpleNamespace(confirm=confirm_mock, prompt=prompt_mock)
     download_mock = AsyncMock(side_effect=AssertionError("should not download on empty results"))
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
-    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
-    monkeypatch.setattr(workflow_module.typer, "prompt", prompt_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
 
     with pytest.raises((typer.Exit, ValueError), match=r"(?i)no papers|no results"):
@@ -326,6 +318,7 @@ async def test_empty_search_result_fails_before_prompting_or_downloading(
             query="empty query",
             interactive=True,
             output=tmp_path / "empty.json",
+            prompt_io=prompt_io,
         )
 
     download_mock.assert_not_awaited()
@@ -341,17 +334,18 @@ async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(
     prepare_mock = AsyncMock(return_value=SimpleNamespace())
     run_mock = AsyncMock(return_value=result)
     confirm_mock = Mock(return_value=False)
+    prompt_io = SimpleNamespace(confirm=confirm_mock, prompt=Mock())
 
     monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", AsyncMock())
-    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
 
     workflow_result = await workflow_module.run_fetch_workflow(
         query="single-cell transformers",
         interactive=True,
         output=tmp_path / "domain.json",
+        prompt_io=prompt_io,
     )
 
     assert len(workflow_result.preview_papers) == 10
@@ -387,17 +381,16 @@ async def test_keyword_strategy_defaults_to_specific_without_scope_prompt(
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", AsyncMock())
-    monkeypatch.setattr(workflow_module.typer, "confirm", Mock(return_value=False))
-    monkeypatch.setattr(
-        workflow_module.typer,
-        "prompt",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected prompt")),
+    prompt_io = SimpleNamespace(
+        confirm=Mock(return_value=False),
+        prompt=Mock(side_effect=AssertionError("unexpected prompt")),
     )
 
     await workflow_module.run_fetch_workflow(
         query="vision transformers",
         interactive=True,
         output=tmp_path / "ranked.json",
+        prompt_io=prompt_io,
     )
 
     prepared_query = prepare_mock.await_args.args[0]
@@ -417,7 +410,7 @@ async def test_keyword_strategy_honors_cli_overrides(
     monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
     monkeypatch.setattr(workflow_module, "run", run_mock)
     monkeypatch.setattr(workflow_module, "run_download_for_result", AsyncMock())
-    monkeypatch.setattr(workflow_module.typer, "confirm", Mock(return_value=False))
+    prompt_io = SimpleNamespace(confirm=Mock(return_value=False), prompt=Mock())
 
     await workflow_module.run_fetch_workflow(
         query="vision transformers",
@@ -425,8 +418,117 @@ async def test_keyword_strategy_honors_cli_overrides(
         output=tmp_path / "ranked.json",
         keyword_count=2,
         no_keyword_expansion=True,
+        prompt_io=prompt_io,
     )
 
     prepared_query = prepare_mock.await_args.args[0]
     assert prepared_query.search_scope == "specific"
     assert prepared_query.keyword_count == 0
+
+
+async def test_non_interactive_download_defaults_to_all_results_without_prompting(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("non interactive all", total_papers=5)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="non interactive all"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("unexpected confirm")),
+        prompt=Mock(side_effect=AssertionError("unexpected prompt")),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="non interactive all",
+        interactive=False,
+        download=True,
+        output=tmp_path / "ranked.json",
+        output_dir=tmp_path / "papers",
+        prompt_io=prompt_io,
+    )
+
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is True
+    assert workflow_result.download_top == 5
+    assert download_mock.await_args.kwargs["top_n"] == 5
+
+
+async def test_yes_does_not_bypass_interactive_download_confirmation(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("yes should not bypass", total_papers=4)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="yes should not bypass"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock()
+    confirm_mock = Mock(return_value=False)
+    prompt_io = SimpleNamespace(confirm=confirm_mock, prompt=Mock())
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="yes should not bypass",
+        interactive=True,
+        yes=True,
+        output=tmp_path / "ranked.json",
+        prompt_io=prompt_io,
+    )
+
+    assert workflow_result.download_requested is False
+    assert workflow_result.download_executed is False
+    confirm_mock.assert_called_once()
+    download_mock.assert_not_awaited()
+
+
+async def test_non_interactive_rejects_non_positive_download_top_before_pipeline(
+    monkeypatch, workflow_module
+):
+    parse_mock = AsyncMock(side_effect=AssertionError("search should not run"))
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+
+    with pytest.raises((ValueError, typer.BadParameter), match=r"(?i)download.*top.*positive"):
+        await workflow_module.run_fetch_workflow(
+            query="invalid top",
+            interactive=False,
+            download=True,
+            output_dir=Path("papers"),
+            download_top=0,
+        )
+
+
+async def test_interactive_rejects_non_positive_prompted_download_top(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("prompted invalid top", total_papers=5)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="prompted invalid top"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(side_effect=AssertionError("download should not run"))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(return_value=True),
+        prompt=Mock(side_effect=[str(tmp_path / "papers"), "0"]),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    with pytest.raises((ValueError, typer.BadParameter), match=r"(?i)download.*top.*positive"):
+        await workflow_module.run_fetch_workflow(
+            query="prompted invalid top",
+            interactive=True,
+            output=tmp_path / "ranked.json",
+            prompt_io=prompt_io,
+        )
+
+    download_mock.assert_not_awaited()
