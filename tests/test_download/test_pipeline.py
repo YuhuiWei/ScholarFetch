@@ -201,6 +201,11 @@ async def test_rerun_skips_successful_paper(tmp_path):
     manifest = await run_download(
         _make_results_file(tmp_path, papers=papers), output_dir
     )
+    assert len(manifest.entries) == 2
+    paper_ids = [entry.paper_id for entry in manifest.entries]
+    assert set(paper_ids) == {papers[0].paper_id, papers[1].paper_id}
+    assert paper_ids.count(papers[0].paper_id) == 1
+    assert paper_ids.count(papers[1].paper_id) == 1
     successes = {e.paper_id for e in manifest.entries if e.status == "success"}
     assert papers[0].paper_id in successes
     assert papers[1].paper_id in successes

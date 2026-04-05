@@ -73,7 +73,8 @@ async def test_interactive_saves_full_results_and_stops_when_download_declined(
     assert workflow_result.saved_result_path == saved_results_path
     assert workflow_result.download_requested is False
     assert workflow_result.download_executed is False
-    assert getattr(workflow_result, "download_manifest", None) is None
+    assert hasattr(workflow_result, "download_manifest")
+    assert workflow_result.download_manifest is None
     parse_mock.assert_awaited_once_with("graph transformers")
     prepare_mock.assert_awaited_once()
     run_mock.assert_awaited_once()
@@ -361,3 +362,4 @@ async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(
     assert run_mock.await_args.kwargs["domain_category_override"] == "bioinformatics"
     saved = _load_saved_result(tmp_path / "domain.json")
     assert len(saved.papers) == 15
+    assert [paper.paper_id for paper in saved.papers] == [paper.paper_id for paper in result.papers]
