@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import httpx
+import pytest
 import respx
 from nexus_paper_fetcher.models import Paper, RunResult, ScoreBreakdown, SearchQuery
 from nexus_paper_fetcher.download.manifest import Manifest, ManifestEntry, load_manifest, save_manifest
@@ -103,6 +104,8 @@ async def test_full_run_produces_correct_manifest(tmp_path):
 
     open_access_entry = by_paper[papers[0].paper_id]
     assert open_access_entry.title == papers[0].title
+    assert open_access_entry.rank == 1
+    assert open_access_entry.score == pytest.approx(0.9)
     assert open_access_entry.status == "success"
     assert open_access_entry.source_used == "open_access_url"
     assert open_access_entry.file_path is not None
@@ -111,6 +114,8 @@ async def test_full_run_produces_correct_manifest(tmp_path):
 
     arxiv_entry = by_paper[papers[1].paper_id]
     assert arxiv_entry.title == papers[1].title
+    assert arxiv_entry.rank == 2
+    assert arxiv_entry.score == pytest.approx(0.8)
     assert arxiv_entry.status == "success"
     assert arxiv_entry.source_used == "arxiv"
     assert arxiv_entry.file_path is not None
@@ -119,6 +124,8 @@ async def test_full_run_produces_correct_manifest(tmp_path):
 
     failed_entry = by_paper[papers[2].paper_id]
     assert failed_entry.title == papers[2].title
+    assert failed_entry.rank == 3
+    assert failed_entry.score == pytest.approx(0.7)
     assert failed_entry.status == "failed"
     assert failed_entry.file_path is None
     assert failed_entry.error is not None
@@ -178,8 +185,14 @@ async def test_manifest_written_to_disk(tmp_path):
 
     by_paper = {entry.paper_id: entry for entry in saved.entries}
     assert set(by_paper) == {paper.paper_id for paper in papers}
+    assert by_paper[papers[0].paper_id].rank == 1
+    assert by_paper[papers[0].paper_id].score == pytest.approx(0.9)
     assert by_paper[papers[0].paper_id].source_used == "open_access_url"
+    assert by_paper[papers[1].paper_id].rank == 2
+    assert by_paper[papers[1].paper_id].score == pytest.approx(0.8)
     assert by_paper[papers[1].paper_id].source_used == "arxiv"
+    assert by_paper[papers[2].paper_id].rank == 3
+    assert by_paper[papers[2].paper_id].score == pytest.approx(0.7)
     assert by_paper[papers[2].paper_id].status == "failed"
     assert by_paper[papers[2].paper_id].error is not None
 

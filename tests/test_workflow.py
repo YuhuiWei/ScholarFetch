@@ -189,7 +189,11 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
     saved = _load_saved_result(tmp_path / "ranked.json")
     assert len(saved.papers) == 9
     confirm_mock.assert_called_once()
-    assert prompt_mock.call_count >= 2
+    assert prompt_mock.call_count == 2
+    first_prompt_text = prompt_mock.call_args_list[0].args[0].lower()
+    second_prompt_text = prompt_mock.call_args_list[1].args[0].lower()
+    assert "directory" in first_prompt_text or "output" in first_prompt_text
+    assert "how many" in second_prompt_text or "top" in second_prompt_text
     download_mock.assert_awaited_once()
     args = download_mock.await_args.args
     kwargs = download_mock.await_args.kwargs
@@ -250,5 +254,8 @@ async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(
     )
 
     assert len(workflow_result.preview_papers) == 10
+    assert [paper.paper_id for paper in workflow_result.preview_papers] == [
+        paper.paper_id for paper in result.papers[:10]
+    ]
     saved = _load_saved_result(tmp_path / "domain.json")
     assert len(saved.papers) == 15
