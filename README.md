@@ -192,7 +192,7 @@ The manifest is written atomically after each paper — safe under SLURM preempt
 ## Running Tests
 
 ```bash
-pytest                          # all unit tests (113 tests)
+pytest                          # all unit tests
 pytest tests/test_download/ -v  # Phase 2 tests only
 pytest tests/test_dedup.py -v   # single file
 pytest -m integration           # real API tests (requires keys)

@@ -306,3 +306,23 @@ def test_fetch_summary_reports_full_ranked_count_with_preview_rows(tmp_path, mon
     assert "[nexus] ranked top 2  →" in result.output
     assert str(tmp_path / "custom.json") in result.output
     assert "[nexus] showing top 1 preview papers" in result.output
+
+
+def test_fetch_download_flag_forces_download_confirmation_opt_in(tmp_path, monkeypatch):
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
+
+    confirm_mock = Mock(return_value=False)
+    monkeypatch.setattr(cli.typer, "confirm", confirm_mock)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["fetch", "attention", "--download", "--output", str(tmp_path / "result.json")],
+    )
+
+    assert result.exit_code == 0
+    workflow_mock.assert_awaited_once()
+    prompt_io = workflow_mock.await_args.kwargs["prompt_io"]
+    assert prompt_io.confirm("Download PDFs for these results?") is True
+    confirm_mock.assert_not_called()
