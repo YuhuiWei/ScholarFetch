@@ -102,6 +102,8 @@ async def test_non_interactive_downloads_immediately_when_download_true(
         download_top=4,
     )
 
+    saved = _load_saved_result(tmp_path / "ranked.json")
+    assert len(saved.papers) == 6
     download_mock.assert_awaited_once()
     args = download_mock.await_args.args
     kwargs = download_mock.await_args.kwargs
@@ -184,6 +186,8 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
         output=tmp_path / "ranked.json",
     )
 
+    saved = _load_saved_result(tmp_path / "ranked.json")
+    assert len(saved.papers) == 9
     confirm_mock.assert_called_once()
     assert prompt_mock.call_count >= 2
     download_mock.assert_awaited_once()
@@ -192,6 +196,34 @@ async def test_interactive_accepts_download_and_forwards_prompted_values(
     assert args[0] == result
     assert args[1] == tmp_path / "papers"
     assert kwargs["top_n"] == 6
+
+
+async def test_empty_search_result_fails_before_prompting_or_downloading(
+    tmp_path, monkeypatch, workflow_module
+):
+    empty_result = _make_result("empty query", total_papers=0)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="empty query"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=empty_result)
+    confirm_mock = Mock(side_effect=AssertionError("should not prompt on empty results"))
+    prompt_mock = Mock(side_effect=AssertionError("should not prompt on empty results"))
+    download_mock = AsyncMock(side_effect=AssertionError("should not download on empty results"))
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module.typer, "confirm", confirm_mock)
+    monkeypatch.setattr(workflow_module.typer, "prompt", prompt_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    with pytest.raises((typer.Exit, ValueError), match=r"(?i)no papers|no results"):
+        await workflow_module.run_fetch_workflow(
+            query="empty query",
+            interactive=True,
+            output=tmp_path / "empty.json",
+        )
+
+    download_mock.assert_not_awaited()
 
 
 async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(

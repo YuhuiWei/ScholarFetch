@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from typer.testing import CliRunner
 
@@ -212,16 +212,18 @@ def test_fetch_forwards_no_keyword_expansion_to_workflow(tmp_path, monkeypatch):
 
 
 def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
+    prompt_mock = Mock(side_effect=["attention", "quit"])
     monkeypatch.setattr(
         cli,
         "parse_natural_language_query",
-        AsyncMock(return_value=(SearchQuery(query="attention", top_n=3), None)),
+        AsyncMock(return_value=(SearchQuery(query="attention", top_n=3, keyword_count=8), None)),
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(return_value=SimpleNamespace()),
     )
+    monkeypatch.setattr(cli.typer, "prompt", prompt_mock)
     run_mock = AsyncMock(return_value=_make_result("attention"))
     monkeypatch.setattr(cli, "run", run_mock)
 
@@ -229,14 +231,23 @@ def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
     result = runner.invoke(
         cli.app,
         ["shell", "--output-dir", str(tmp_path)],
-        input="attention\nbroader\nquit\n",
     )
 
     assert result.exit_code == 0
+    assert prompt_mock.call_count == 2
     assert run_mock.await_count == 1
     assert len(list(tmp_path.glob("*.json"))) == 1
     submitted = run_mock.await_args.args[0]
     assert submitted.keyword_count == 8
+
+
+def test_download_command_missing_results_file_reports_error_contract(tmp_path):
+    runner = CliRunner()
+    missing_path = tmp_path / "does-not-exist.json"
+    result = runner.invoke(cli.app, ["download", str(missing_path)])
+
+    assert result.exit_code == 1
+    assert f"[nexus-dl] error: file not found: {missing_path}" in result.output
 
 
 def test_fetch_leaves_scope_keyword_strategy_to_workflow(tmp_path, monkeypatch):
