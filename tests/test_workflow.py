@@ -74,6 +74,15 @@ async def test_interactive_saves_full_results_and_stops_when_download_declined(
     assert workflow_result.download_requested is False
     assert workflow_result.download_executed is False
     assert getattr(workflow_result, "download_manifest", None) is None
+    parse_mock.assert_awaited_once_with("graph transformers")
+    prepare_mock.assert_awaited_once()
+    run_mock.assert_awaited_once()
+    prepared_query = prepare_mock.await_args.args[0]
+    assert isinstance(prepared_query, SearchQuery)
+    assert prepared_query.query == "graph transformers"
+    assert prepare_mock.await_args.kwargs["domain_category_override"] == "cs_ml"
+    assert run_mock.await_args.args[0] is prepared_query
+    assert run_mock.await_args.kwargs["domain_category_override"] == "cs_ml"
     confirm_mock.assert_called_once()
     download_mock.assert_not_awaited()
 
@@ -114,6 +123,15 @@ async def test_non_interactive_downloads_immediately_when_download_true(
     assert workflow_result.download_top == 4
     assert workflow_result.output_dir == tmp_path / "papers"
     assert workflow_result.download_manifest is not None
+    parse_mock.assert_awaited_once_with("foundation models")
+    prepare_mock.assert_awaited_once()
+    run_mock.assert_awaited_once()
+    prepared_query = prepare_mock.await_args.args[0]
+    assert isinstance(prepared_query, SearchQuery)
+    assert prepared_query.query == "foundation models"
+    assert prepare_mock.await_args.kwargs["domain_category_override"] == "cs_ml"
+    assert run_mock.await_args.args[0] is prepared_query
+    assert run_mock.await_args.kwargs["domain_category_override"] == "cs_ml"
     download_mock.assert_awaited_once()
     args = download_mock.await_args.args
     kwargs = download_mock.await_args.kwargs
@@ -332,5 +350,14 @@ async def test_domain_search_preview_top_10_while_saved_results_keep_full_set(
     assert workflow_result.saved_result_path == tmp_path / "domain.json"
     assert workflow_result.download_requested is False
     assert workflow_result.download_executed is False
+    parse_mock.assert_awaited_once_with("single-cell transformers")
+    prepare_mock.assert_awaited_once()
+    run_mock.assert_awaited_once()
+    prepared_query = prepare_mock.await_args.args[0]
+    assert isinstance(prepared_query, SearchQuery)
+    assert prepared_query.query == "single-cell transformers"
+    assert prepare_mock.await_args.kwargs["domain_category_override"] == "bioinformatics"
+    assert run_mock.await_args.args[0] is prepared_query
+    assert run_mock.await_args.kwargs["domain_category_override"] == "bioinformatics"
     saved = _load_saved_result(tmp_path / "domain.json")
     assert len(saved.papers) == 15

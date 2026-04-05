@@ -178,7 +178,10 @@ async def test_rerun_skips_successful_paper(tmp_path):
     save_manifest(existing, output_dir / "manifest.json")
 
     # Only paper 2 should be downloaded
-    respx.get("https://export.arxiv.org/api/query").mock(
+    open_access_route = respx.get("https://example.com/p1.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    arxiv_query_route = respx.get("https://export.arxiv.org/api/query").mock(
         return_value=httpx.Response(
             200,
             text="""<?xml version="1.0" encoding="UTF-8"?>
@@ -191,7 +194,7 @@ async def test_rerun_skips_successful_paper(tmp_path):
 </feed>""",
         )
     )
-    respx.get("https://arxiv.org/pdf/2201.00001v1.pdf").mock(
+    arxiv_pdf_route = respx.get("https://arxiv.org/pdf/2201.00001v1.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
 
@@ -201,6 +204,9 @@ async def test_rerun_skips_successful_paper(tmp_path):
     successes = {e.paper_id for e in manifest.entries if e.status == "success"}
     assert papers[0].paper_id in successes
     assert papers[1].paper_id in successes
+    assert open_access_route.call_count == 0
+    assert arxiv_query_route.call_count == 1
+    assert arxiv_pdf_route.call_count == 1
 
 
 @respx.mock
@@ -236,10 +242,27 @@ async def test_rerun_with_legacy_ezproxy_manifest_entry_skips_cleanly(tmp_path):
         )
     )
 
+    open_access_route = respx.get("https://example.com/p1.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    arxiv_query_route = respx.get("https://export.arxiv.org/api/query").mock(
+        return_value=httpx.Response(
+            200,
+            text="""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"></feed>""",
+        )
+    )
+    unpaywall_route = respx.get("https://api.unpaywall.org/v2/10.1234/nope").mock(
+        return_value=httpx.Response(404, json={})
+    )
+
     manifest = await run_download(_make_results_file(tmp_path, papers=papers), output_dir)
     assert len(manifest.entries) == 1
     assert manifest.entries[0].status == "success"
     assert manifest.entries[0].source_used == "open_access_url"
+    assert open_access_route.call_count == 0
+    assert arxiv_query_route.call_count == 0
+    assert unpaywall_route.call_count == 0
 
 
 @respx.mock
