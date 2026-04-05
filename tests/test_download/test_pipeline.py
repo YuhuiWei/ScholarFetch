@@ -100,6 +100,7 @@ async def test_full_run_produces_correct_manifest(tmp_path):
     assert open_access_entry.file_path is not None
     assert Path(open_access_entry.file_path).parent == output_dir
     assert Path(open_access_entry.file_path).suffix == ".pdf"
+    assert Path(open_access_entry.file_path).exists()
 
     arxiv_entry = by_paper[papers[1].paper_id]
     assert arxiv_entry.title == papers[1].title
@@ -110,6 +111,7 @@ async def test_full_run_produces_correct_manifest(tmp_path):
     assert arxiv_entry.file_path is not None
     assert Path(arxiv_entry.file_path).parent == output_dir
     assert Path(arxiv_entry.file_path).suffix == ".pdf"
+    assert Path(arxiv_entry.file_path).exists()
 
     failed_entry = by_paper[papers[2].paper_id]
     assert failed_entry.title == papers[2].title
@@ -275,11 +277,19 @@ async def test_top_n_limits_papers_processed(tmp_path):
     respx.get("https://example.com/p1.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
+    papers = _make_default_three_papers()
     output_dir = tmp_path / "papers"
     manifest = await run_download(
-        _make_results_file(tmp_path), output_dir, top_n=1
+        _make_results_file(tmp_path, papers=papers), output_dir, top_n=1
     )
     assert len(manifest.entries) == 1
+    kept = manifest.entries[0]
+    assert kept.paper_id == papers[0].paper_id
+    assert kept.rank == 1
+    assert kept.title == papers[0].title
+    assert kept.status == "success"
+    assert kept.file_path is not None
+    assert Path(kept.file_path).exists()
 
 
 @respx.mock
