@@ -47,6 +47,26 @@ def _make_results_file(tmp_path: Path, papers: list[Paper] | None = None) -> Pat
 
 @respx.mock
 async def test_full_run_produces_correct_manifest(tmp_path):
+    papers = [
+        Paper.create(
+            title="Paper One Open Access",
+            open_access_pdf_url="https://example.com/p1.pdf",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.9),
+        ),
+        Paper.create(
+            title="Paper Two DOI to Arxiv",
+            doi="10.5555/p2",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.8),
+        ),
+        Paper.create(
+            title="Paper Three No Free Source",
+            doi="10.1234/nope",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.7),
+        ),
+    ]
     respx.get("https://example.com/p1.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
@@ -73,14 +93,59 @@ async def test_full_run_produces_correct_manifest(tmp_path):
         return_value=httpx.Response(404, json={})
     )
     output_dir = tmp_path / "papers"
-    manifest = await run_download(_make_results_file(tmp_path), output_dir)
+    manifest = await run_download(_make_results_file(tmp_path, papers=papers), output_dir)
     assert sum(1 for e in manifest.entries if e.status == "success") == 2
     assert sum(1 for e in manifest.entries if e.status == "failed") == 1
     assert len(manifest.entries) == 3
 
+    by_paper = {entry.paper_id: entry for entry in manifest.entries}
+    assert set(by_paper) == {paper.paper_id for paper in papers}
+
+    open_access_entry = by_paper[papers[0].paper_id]
+    assert open_access_entry.title == papers[0].title
+    assert open_access_entry.status == "success"
+    assert open_access_entry.source_used == "open_access_url"
+    assert open_access_entry.file_path is not None
+    assert Path(open_access_entry.file_path).parent == output_dir
+    assert Path(open_access_entry.file_path).suffix == ".pdf"
+
+    arxiv_entry = by_paper[papers[1].paper_id]
+    assert arxiv_entry.title == papers[1].title
+    assert arxiv_entry.status == "success"
+    assert arxiv_entry.source_used == "arxiv"
+    assert arxiv_entry.file_path is not None
+    assert Path(arxiv_entry.file_path).parent == output_dir
+    assert Path(arxiv_entry.file_path).suffix == ".pdf"
+
+    failed_entry = by_paper[papers[2].paper_id]
+    assert failed_entry.title == papers[2].title
+    assert failed_entry.status == "failed"
+    assert failed_entry.file_path is None
+    assert failed_entry.error is not None
+
 
 @respx.mock
 async def test_manifest_written_to_disk(tmp_path):
+    papers = [
+        Paper.create(
+            title="Paper One Open Access",
+            open_access_pdf_url="https://example.com/p1.pdf",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.9),
+        ),
+        Paper.create(
+            title="Paper Two DOI to Arxiv",
+            doi="10.5555/p2",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.8),
+        ),
+        Paper.create(
+            title="Paper Three No Free Source",
+            doi="10.1234/nope",
+            year=2022,
+            scores=ScoreBreakdown(composite=0.7),
+        ),
+    ]
     respx.get("https://example.com/p1.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
@@ -107,9 +172,16 @@ async def test_manifest_written_to_disk(tmp_path):
         return_value=httpx.Response(404, json={})
     )
     output_dir = tmp_path / "papers"
-    await run_download(_make_results_file(tmp_path), output_dir)
+    await run_download(_make_results_file(tmp_path, papers=papers), output_dir)
     saved = load_manifest(output_dir / "manifest.json")
     assert len(saved.entries) == 3
+
+    by_paper = {entry.paper_id: entry for entry in saved.entries}
+    assert set(by_paper) == {paper.paper_id for paper in papers}
+    assert by_paper[papers[0].paper_id].source_used == "open_access_url"
+    assert by_paper[papers[1].paper_id].source_used == "arxiv"
+    assert by_paper[papers[2].paper_id].status == "failed"
+    assert by_paper[papers[2].paper_id].error is not None
 
 
 @respx.mock
