@@ -85,11 +85,49 @@ nexus fetch "retrieval augmented generation for biomedicine" \
 
 **Output:** JSON file in `results/` containing ranked papers with scores, metadata, and source URLs.
 When `--download` is enabled, the fetch workflow also writes downloaded files and `manifest.json` to the selected output directory.
+`--download-top N` means "keep walking the ranked list until N successful downloads are available, or the ranked list is exhausted."
+
+### `nexus fetch` routing behavior
+
+`nexus fetch "..."` now supports three human-facing modes:
+
+1. plain search query
+   - runs search, saves ranked JSON, then asks whether to download
+2. natural-language search-plus-download query
+   - example: `nexus fetch "download 10 papers about graph transformers"`
+   - runs search, saves ranked JSON, and downloads until 10 papers succeed or the ranked list is exhausted
+3. existing results JSON path
+   - example: `nexus fetch results/graph_transformers.json`
+   - skips search and routes directly to download from the saved ranked result
+   - if no top count is provided, downloads all downloadable content in the JSON
 
 ### Non-interactive automation
 
 Use `--yes` (alias `--non-interactive`) to disable prompts and run with explicit flags only.
 If `--download` is set in non-interactive mode, `--output-dir` is required.
+
+### CLI examples
+
+```bash
+# Plain search: after ranking, CLI asks whether to download and where to save files
+nexus fetch "graph transformers for molecular property prediction"
+
+# Query-driven search + download: no extra download confirmation prompt
+nexus fetch "download 10 papers about graph transformers"
+
+# Query-driven search + download with explicit non-interactive output directory
+nexus fetch "download 10 papers about graph transformers" \
+  --yes \
+  --output-dir papers
+
+# Download from an existing ranked results JSON via fetch
+nexus fetch results/2026-04-05_graph-transformers_top10.json \
+  --yes \
+  --output-dir papers
+
+# The shell command supports the same integrated routing interactively
+nexus shell --output-dir results/
+```
 
 ### Interactive shell mode
 
@@ -97,8 +135,8 @@ If `--download` is set in non-interactive mode, `--output-dir` is required.
 nexus shell --output-dir results/
 ```
 
-Runs a read-eval loop: enter a query, choose `specific` or `broad` scope for domain searches, get ranked results, repeat until `quit`.
-Specific paper lookups skip keyword expansion and return exact-title matches first; if an exact match is not found, the result JSON is marked `not_found: true` and the closest matches are returned.
+Runs a read-eval loop using the same integrated workflow as `nexus fetch`: enter a query, review ranked results, optionally continue into download, and repeat until `quit`.
+Specific paper lookups return exact-title matches first; if an exact match is not found, the result JSON is marked `not_found: true` and the closest matches are returned. In the integrated workflow, closest-match lookup results are saved but are not auto-downloaded.
 
 ### Scoring
 
@@ -145,7 +183,7 @@ nexus download results/2026-04-01_attention_top20.json
 # Custom output directory
 nexus download results/papers.json --output-dir /data/papers
 
-# Download only top 10
+# Collect 10 successfully downloadable papers from the ranked list
 nexus download results/papers.json --top 10
 ```
 
@@ -167,7 +205,7 @@ The output directory may contain a mix of `.pdf` and `.xml` files.
 
 ### Manifest
 
-Every download result is recorded in `manifest.json` in the output directory:
+Every download result is recorded in `manifest.json` in the output directory, along with a summary of the latest run:
 
 ```json
 {
@@ -183,11 +221,35 @@ Every download result is recorded in `manifest.json` in the output directory:
       "file_size_kb": 412,
       "error": null
     }
-  ]
+  ],
+  "download_summary": {
+    "requested_success_count": 10,
+    "candidate_count": 20,
+    "attempted_count": 13,
+    "already_downloaded_count": 0,
+    "downloaded_count": 10,
+    "available_count": 10,
+    "failed_count": 3,
+    "shortfall_count": 0,
+    "backup_candidates": [
+      {
+        "paper_id": "abc123",
+        "title": "Some high-ranked undownloadable paper",
+        "rank": 2,
+        "score": 0.88,
+        "status": "failed",
+        "source_used": null,
+        "file_path": null,
+        "file_size_kb": null,
+        "error": "no downloadable source found"
+      }
+    ]
+  }
 }
 ```
 
 The manifest is written atomically after each paper — safe under SLURM preemption. Re-running skips papers already marked `"success"`.
+If the ranked list cannot satisfy the requested count, `download_summary.shortfall_count` reports the gap and `download_summary.backup_candidates` lists up to the top 5 failed papers for manual follow-up.
 
 ## Running Tests
 
@@ -220,10 +282,36 @@ async def main() -> None:
     )
     print("Saved ranked results:", workflow_result.saved_result_path)
     print("Downloaded:", workflow_result.download_executed)
+    if workflow_result.download_summary is not None:
+        print("Shortfall:", workflow_result.download_summary.shortfall_count)
+        print("Backup titles:", [entry.title for entry in workflow_result.download_summary.backup_candidates])
 
 
 asyncio.run(main())
 ```
+
+You can also pass natural-language download requests directly:
+
+```python
+workflow_result = await run_fetch_workflow(
+    query="download 10 papers about graph transformers",
+    interactive=False,
+    output_dir=Path("papers"),
+)
+```
+
+And you can route an existing search-result JSON file through the same API:
+
+```python
+workflow_result = await run_fetch_workflow(
+    query="results/2026-04-05_graph-transformers_top10.json",
+    interactive=False,
+    output_dir=Path("papers"),
+)
+```
+
+For paper lookup, if `workflow_result.result.not_found` is `True`, the workflow returns the closest matches but does not auto-download them.
+For both search-driven downloads and direct JSON downloads, inspect `workflow_result.download_summary` to see the fulfilled count, shortfall, and top failed backup candidates.
 
 ---
 
@@ -235,7 +323,7 @@ asyncio.run(main())
 - `RelevanceScorer` defaults to 0.5 when `OPENAI_API_KEY` unset
 - Layered evaluation removes obvious review/survey mismatches before final reranking
 - All fetchers return `[]` on failure — never raise
-- Downloads capped at 3 concurrent (`asyncio.Semaphore(3)`)
+- Downloads capped at 3 concurrent (ranked-list batching)
 - Manifest written atomically after each paper (`os.replace`) for SLURM crash-safety
 
 ---

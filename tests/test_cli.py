@@ -95,6 +95,59 @@ def test_fetch_forwards_non_interactive_download_flags(tmp_path, monkeypatch):
     assert kwargs["interactive"] is False
 
 
+def test_fetch_forwards_natural_language_download_phrase_to_workflow(tmp_path, monkeypatch):
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
+    monkeypatch.setattr(
+        cli,
+        "parse_natural_language_query",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "prepare_query",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["fetch", "download 10 papers about graph transformers", "--output", str(tmp_path / "result.json")],
+    )
+
+    assert result.exit_code == 0
+    workflow_mock.assert_awaited_once()
+    assert workflow_mock.await_args.kwargs["query"] == "download 10 papers about graph transformers"
+
+
+def test_fetch_forwards_existing_results_json_to_workflow(tmp_path, monkeypatch):
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
+    monkeypatch.setattr(
+        cli,
+        "parse_natural_language_query",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "prepare_query",
+        AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+    )
+
+    results_path = tmp_path / "saved-results.json"
+    results_path.write_text("{}")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["fetch", str(results_path), "--yes", "--output-dir", str(tmp_path / "papers")],
+    )
+
+    assert result.exit_code == 0
+    workflow_mock.assert_awaited_once()
+    assert workflow_mock.await_args.kwargs["query"] == str(results_path)
+
+
 def test_fetch_forwards_existing_fetch_controls_to_workflow(tmp_path, monkeypatch):
     workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
     monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
@@ -213,19 +266,24 @@ def test_fetch_forwards_no_keyword_expansion_to_workflow(tmp_path, monkeypatch):
 
 def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
     prompt_mock = Mock(side_effect=["attention", "quit"])
+    monkeypatch.setattr(cli.typer, "prompt", prompt_mock)
+    workflow_mock = AsyncMock(return_value=_workflow_result(tmp_path))
+    monkeypatch.setattr(cli, "run_fetch_workflow", workflow_mock, raising=False)
     monkeypatch.setattr(
         cli,
         "parse_natural_language_query",
-        AsyncMock(return_value=(SearchQuery(query="attention", top_n=3, keyword_count=8), None)),
+        AsyncMock(side_effect=AssertionError("shell should delegate parsing to workflow layer")),
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
-        AsyncMock(return_value=SimpleNamespace()),
+        AsyncMock(side_effect=AssertionError("shell should delegate preparation to workflow layer")),
     )
-    monkeypatch.setattr(cli.typer, "prompt", prompt_mock)
-    run_mock = AsyncMock(return_value=_make_result("attention"))
-    monkeypatch.setattr(cli, "run", run_mock)
+    monkeypatch.setattr(
+        cli,
+        "run",
+        AsyncMock(side_effect=AssertionError("shell should delegate execution to workflow layer")),
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -235,10 +293,11 @@ def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     assert prompt_mock.call_count == 2
-    assert run_mock.await_count == 1
-    assert len(list(tmp_path.glob("*.json"))) == 1
-    submitted = run_mock.await_args.args[0]
-    assert submitted.keyword_count == 8
+    workflow_mock.assert_awaited_once()
+    kwargs = workflow_mock.await_args.kwargs
+    assert kwargs["query"] == "attention"
+    assert kwargs["interactive"] is True
+    assert kwargs["results_output_dir"] == tmp_path
 
 
 def test_download_command_missing_results_file_reports_error_contract(tmp_path):

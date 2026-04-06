@@ -6,7 +6,13 @@ import pytest
 import respx
 import typer
 from nexus_paper_fetcher.models import Paper, RunResult, ScoreBreakdown, SearchQuery
-from nexus_paper_fetcher.download.manifest import Manifest, ManifestEntry, load_manifest, save_manifest
+from nexus_paper_fetcher.download.manifest import (
+    DownloadSummary,
+    Manifest,
+    ManifestEntry,
+    load_manifest,
+    save_manifest,
+)
 from nexus_paper_fetcher.download.pipeline import run_download, run_download_for_result
 from tests.test_download.constants import FAKE_PDF
 
@@ -306,6 +312,9 @@ async def test_top_n_limits_papers_processed(tmp_path):
     respx.get("https://example.com/p1.pdf").mock(
         return_value=httpx.Response(200, content=FAKE_PDF)
     )
+    respx.get("https://api.unpaywall.org/v2/10.1234/nope").mock(
+        return_value=httpx.Response(404, json={})
+    )
     papers = _make_default_three_papers()
     output_dir = tmp_path / "papers"
     manifest = await run_download(
@@ -319,6 +328,128 @@ async def test_top_n_limits_papers_processed(tmp_path):
     assert kept.status == "success"
     assert kept.file_path is not None
     assert Path(kept.file_path).exists()
+    assert manifest.download_summary == DownloadSummary(
+        requested_success_count=1,
+        candidate_count=3,
+        attempted_count=1,
+        already_downloaded_count=0,
+        downloaded_count=1,
+        available_count=1,
+        failed_count=0,
+        shortfall_count=0,
+        backup_candidates=[],
+    )
+
+
+@respx.mock
+async def test_top_n_targets_successful_downloads_instead_of_candidate_count(tmp_path):
+    rank_2_route = respx.get("https://example.com/rank-2.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    rank_4_route = respx.get("https://example.com/rank-4.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+    rank_5_route = respx.get("https://example.com/rank-5.pdf").mock(
+        return_value=httpx.Response(200, content=FAKE_PDF)
+    )
+
+    papers = [
+        Paper.create(title="Rank 1 No Download", year=2024, scores=ScoreBreakdown(composite=0.95)),
+        Paper.create(
+            title="Rank 2 Downloadable",
+            open_access_pdf_url="https://example.com/rank-2.pdf",
+            year=2024,
+            scores=ScoreBreakdown(composite=0.9),
+        ),
+        Paper.create(title="Rank 3 No Download", year=2024, scores=ScoreBreakdown(composite=0.85)),
+        Paper.create(
+            title="Rank 4 Downloadable",
+            open_access_pdf_url="https://example.com/rank-4.pdf",
+            year=2024,
+            scores=ScoreBreakdown(composite=0.8),
+        ),
+        Paper.create(
+            title="Rank 5 Should Not Be Reached",
+            open_access_pdf_url="https://example.com/rank-5.pdf",
+            year=2024,
+            scores=ScoreBreakdown(composite=0.75),
+        ),
+    ]
+
+    output_dir = tmp_path / "papers"
+    manifest = await run_download(
+        _make_results_file(tmp_path, papers=papers),
+        output_dir,
+        top_n=2,
+    )
+
+    assert len(manifest.entries) == 4
+    assert {entry.paper_id for entry in manifest.entries} == {paper.paper_id for paper in papers[:4]}
+    assert sum(1 for entry in manifest.entries if entry.status == "success") == 2
+    assert sum(1 for entry in manifest.entries if entry.status == "failed") == 2
+    assert rank_2_route.call_count == 1
+    assert rank_4_route.call_count == 1
+    assert rank_5_route.call_count == 0
+    assert manifest.download_summary == DownloadSummary(
+        requested_success_count=2,
+        candidate_count=5,
+        attempted_count=4,
+        already_downloaded_count=0,
+        downloaded_count=2,
+        available_count=2,
+        failed_count=2,
+        shortfall_count=0,
+        backup_candidates=[
+            ManifestEntry(
+                paper_id=papers[0].paper_id,
+                title=papers[0].title,
+                rank=1,
+                score=0.95,
+                status="failed",
+                error="no downloadable source found",
+            ),
+            ManifestEntry(
+                paper_id=papers[2].paper_id,
+                title=papers[2].title,
+                rank=3,
+                score=0.85,
+                status="failed",
+                error="no downloadable source found",
+            ),
+        ],
+    )
+
+
+@respx.mock
+async def test_top_n_reports_shortfall_when_ranked_results_cannot_fill_target(tmp_path):
+    _mock_default_three_paper_routes()
+    output_dir = tmp_path / "papers"
+    manifest = await run_download(
+        _make_results_file(tmp_path, papers=_make_default_three_papers()),
+        output_dir,
+        top_n=3,
+    )
+
+    assert manifest.download_summary == DownloadSummary(
+        requested_success_count=3,
+        candidate_count=3,
+        attempted_count=3,
+        already_downloaded_count=0,
+        downloaded_count=2,
+        available_count=2,
+        failed_count=1,
+        shortfall_count=1,
+        backup_candidates=[
+            ManifestEntry(
+                paper_id=_make_default_three_papers()[2].paper_id,
+                title=_make_default_three_papers()[2].title,
+                rank=3,
+                score=0.7,
+                status="failed",
+                error="no downloadable source found",
+            ),
+        ],
+    )
 
 
 async def test_run_download_rejects_non_positive_top_n(tmp_path):

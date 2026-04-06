@@ -18,7 +18,11 @@ def download_command(
     output_dir: Path = typer.Option(
         _DEFAULT_OUTPUT_DIR, "--output-dir", help="Directory to save downloaded files"
     ),
-    top: Optional[int] = typer.Option(None, "--top", help="Download only top N papers"),
+    top: Optional[int] = typer.Option(
+        None,
+        "--top",
+        help="Target number of successfully downloadable papers to collect",
+    ),
 ) -> None:
     if top is not None and top <= 0:
         raise typer.BadParameter("top must be a positive integer")

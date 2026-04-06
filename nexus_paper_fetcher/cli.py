@@ -131,7 +131,11 @@ def fetch(
     keyword_count: Optional[int] = typer.Option(None, "--keyword-count", help="Number of expansion keywords"),
     no_keyword_expansion: bool = typer.Option(False, "--no-keyword-expansion", help="Disable keyword expansion"),
     download: bool = typer.Option(False, "--download", help="Download full-text files after ranking"),
-    download_top: Optional[int] = typer.Option(None, "--download-top", help="Top N papers to download"),
+    download_top: Optional[int] = typer.Option(
+        None,
+        "--download-top",
+        help="Target number of successfully downloadable papers to collect",
+    ),
     output_dir: Optional[Path] = typer.Option(None, "--output-dir", help="Directory for downloaded files"),
     yes: bool = typer.Option(
         False,
@@ -187,20 +191,20 @@ def shell(
             break
 
         async def _run(query: str) -> None:
-            sq, domain = await parse_natural_language_query(query)
-            _apply_keyword_strategy(
-                sq,
-                cli_keyword_count=None,
-                no_keyword_expansion=False,
+            workflow_result = await run_fetch_workflow(
+                query=query,
+                interactive=True,
+                prompt_io=_TyperPromptAdapter(),
+                results_output_dir=output_dir,
             )
-            await prepare_query(sq, domain_category_override=domain)
-            result = await run(sq, domain_category_override=domain)
-            if not result.papers:
+            if not workflow_result.result.papers:
                 print("[nexus] no papers returned", file=sys.stderr)
                 return
-            out_path = _auto_output_path(query, sq.top_n)
-            out_path = output_dir / out_path.name
-            _write_result(result, out_path)
-            _print_summary(result)
+            _print_summary(
+                workflow_result.result,
+                papers=workflow_result.preview_papers,
+                ranked_count=len(workflow_result.result.papers),
+                output_path=workflow_result.saved_result_path,
+            )
 
         asyncio.run(_run(q))

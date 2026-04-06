@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 import typer
 
+from nexus_paper_fetcher.download.manifest import DownloadSummary, Manifest, ManifestEntry
 from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
 
 
@@ -17,6 +18,7 @@ def _make_result(
     *,
     total_papers: int,
     query_intent: str = "domain_search",
+    not_found: bool = False,
 ) -> RunResult:
     papers = [
         Paper.create(
@@ -32,6 +34,7 @@ def _make_result(
         params=SearchQuery(query=query, top_n=50, query_intent=query_intent),
         sources_used=["openalex"],
         papers=papers,
+        not_found=not_found,
     )
 
 
@@ -141,6 +144,92 @@ async def test_non_interactive_downloads_immediately_when_download_true(
     assert args[0] == result
     assert args[1] == tmp_path / "papers"
     assert kwargs["top_n"] == 4
+
+
+async def test_api_workflow_surfaces_download_summary_metadata(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("connectome computer vision", total_papers=6)
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="connectome computer vision"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    manifest = Manifest(
+        entries=[
+            ManifestEntry(
+                paper_id=result.papers[0].paper_id,
+                title=result.papers[0].title,
+                rank=1,
+                score=0.0,
+                status="failed",
+                error="no downloadable source found",
+            ),
+            ManifestEntry(
+                paper_id=result.papers[1].paper_id,
+                title=result.papers[1].title,
+                rank=2,
+                score=0.0,
+                status="success",
+                source_used="open_access_url",
+                file_path=str(tmp_path / "papers" / "rank_02_paper_02.pdf"),
+                file_size_kb=128,
+            ),
+        ],
+        download_summary=DownloadSummary(
+            requested_success_count=3,
+            candidate_count=6,
+            attempted_count=4,
+            already_downloaded_count=0,
+            downloaded_count=2,
+            available_count=2,
+            failed_count=2,
+            shortfall_count=1,
+            backup_candidates=[
+                ManifestEntry(
+                    paper_id=result.papers[0].paper_id,
+                    title=result.papers[0].title,
+                    rank=1,
+                    score=0.0,
+                    status="failed",
+                    error="no downloadable source found",
+                )
+            ],
+        ),
+    )
+    download_mock = AsyncMock(return_value=manifest)
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("unexpected prompt")),
+        prompt=Mock(side_effect=AssertionError("unexpected prompt")),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="connectome computer vision",
+        interactive=False,
+        download=True,
+        output=tmp_path / "ranked.json",
+        output_dir=tmp_path / "papers",
+        download_top=3,
+        prompt_io=prompt_io,
+    )
+
+    assert workflow_result.download_manifest == manifest
+    assert workflow_result.download_summary == manifest.download_summary
+    assert workflow_result.download_summary is not None
+    assert workflow_result.download_summary.shortfall_count == 1
+    assert workflow_result.download_summary.backup_candidates == [
+        ManifestEntry(
+            paper_id=result.papers[0].paper_id,
+            title=result.papers[0].title,
+            rank=1,
+            score=0.0,
+            status="failed",
+            error="no downloadable source found",
+        )
+    ]
 
 
 async def test_non_interactive_fails_fast_when_download_missing_required_args(
@@ -322,14 +411,138 @@ async def test_paper_lookup_accepts_download_and_defaults_to_all_found_results(
     assert workflow_result.download_requested is True
     assert workflow_result.download_executed is True
     assert workflow_result.output_dir == tmp_path / "papers"
-    assert workflow_result.download_top == 3
+    assert workflow_result.download_top is None
     assert workflow_result.download_manifest is not None
     download_mock.assert_awaited_once()
     args = download_mock.await_args.args
     kwargs = download_mock.await_args.kwargs
     assert args[0] == result
     assert args[1] == tmp_path / "papers"
-    assert kwargs["top_n"] == 3
+    assert kwargs["top_n"] is None
+
+
+async def test_paper_lookup_not_found_skips_api_download_even_when_requested(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result(
+        "Attention Is All You Need",
+        total_papers=3,
+        query_intent="paper_lookup",
+        not_found=True,
+    )
+    parse_mock = AsyncMock(
+        return_value=(SearchQuery(query="Attention Is All You Need", query_intent="paper_lookup"), "cs_ml")
+    )
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(side_effect=AssertionError("closest matches should not be downloaded"))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("non-interactive API should not prompt")),
+        prompt=Mock(side_effect=AssertionError("non-interactive API should not prompt")),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="Attention Is All You Need",
+        interactive=False,
+        download=True,
+        output=tmp_path / "lookup.json",
+        output_dir=tmp_path / "papers",
+        prompt_io=prompt_io,
+    )
+
+    assert workflow_result.saved_result_path == tmp_path / "lookup.json"
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is False
+    assert workflow_result.download_manifest is None
+    download_mock.assert_not_awaited()
+
+
+async def test_query_requested_download_skips_confirmation_and_uses_parsed_top_n(
+    tmp_path, monkeypatch, workflow_module
+):
+    result = _make_result("graph transformers", total_papers=12, query_intent="domain_search")
+    parse_mock = AsyncMock(
+        return_value=(
+            SearchQuery(
+                query="graph transformers",
+                query_intent="domain_search",
+                download_requested=True,
+                download_top_n=10,
+            ),
+            "cs_ml",
+        )
+    )
+    prepare_mock = AsyncMock(return_value=SimpleNamespace())
+    run_mock = AsyncMock(return_value=result)
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("query-driven download should not ask for confirmation")),
+        prompt=Mock(return_value=str(tmp_path / "papers")),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query="download 10 papers about graph transformers",
+        interactive=True,
+        output=tmp_path / "ranked.json",
+        prompt_io=prompt_io,
+    )
+
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is True
+    assert workflow_result.download_top == 10
+    assert workflow_result.output_dir == tmp_path / "papers"
+    assert prompt_io.prompt.call_count == 1
+    download_mock.assert_awaited_once()
+    assert download_mock.await_args.kwargs["top_n"] == 10
+
+
+async def test_results_json_query_routes_to_download_without_search(
+    tmp_path, monkeypatch, workflow_module
+):
+    run_result = _make_result("graph transformers", total_papers=4, query_intent="domain_search")
+    results_path = tmp_path / "saved-results.json"
+    results_path.write_text(run_result.model_dump_json(indent=2))
+
+    parse_mock = AsyncMock(side_effect=AssertionError("results json route should skip NLP parsing"))
+    prepare_mock = AsyncMock(side_effect=AssertionError("results json route should skip query preparation"))
+    run_mock = AsyncMock(side_effect=AssertionError("results json route should skip search execution"))
+    download_mock = AsyncMock(return_value=SimpleNamespace(entries=[]))
+    prompt_io = SimpleNamespace(
+        confirm=Mock(side_effect=AssertionError("non-interactive results-file download should not prompt")),
+        prompt=Mock(side_effect=AssertionError("non-interactive results-file download should not prompt")),
+    )
+
+    monkeypatch.setattr(workflow_module, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(workflow_module, "prepare_query", prepare_mock)
+    monkeypatch.setattr(workflow_module, "run", run_mock)
+    monkeypatch.setattr(workflow_module, "run_download_for_result", download_mock)
+
+    workflow_result = await workflow_module.run_fetch_workflow(
+        query=str(results_path),
+        interactive=False,
+        output_dir=tmp_path / "papers",
+        prompt_io=prompt_io,
+    )
+
+    assert workflow_result.saved_result_path == results_path
+    assert workflow_result.download_requested is True
+    assert workflow_result.download_executed is True
+    assert workflow_result.output_dir == tmp_path / "papers"
+    assert len(workflow_result.preview_papers) == 4
+    assert workflow_result.download_top is None
+    download_mock.assert_awaited_once()
+    assert download_mock.await_args.args[1] == tmp_path / "papers"
+    assert download_mock.await_args.kwargs["top_n"] is None
 
 
 async def test_empty_search_result_fails_before_prompting_or_downloading(
@@ -491,8 +704,8 @@ async def test_non_interactive_download_defaults_to_all_results_without_promptin
 
     assert workflow_result.download_requested is True
     assert workflow_result.download_executed is True
-    assert workflow_result.download_top == 5
-    assert download_mock.await_args.kwargs["top_n"] == 5
+    assert workflow_result.download_top is None
+    assert download_mock.await_args.kwargs["top_n"] is None
 
 
 async def test_yes_does_not_bypass_interactive_download_confirmation(

@@ -20,8 +20,21 @@ class ManifestEntry(BaseModel):
     error: Optional[str] = None
 
 
+class DownloadSummary(BaseModel):
+    requested_success_count: Optional[int] = None
+    candidate_count: int = 0
+    attempted_count: int = 0
+    already_downloaded_count: int = 0
+    downloaded_count: int = 0
+    available_count: int = 0
+    failed_count: int = 0
+    shortfall_count: int = 0
+    backup_candidates: list[ManifestEntry] = Field(default_factory=list)
+
+
 class Manifest(BaseModel):
     entries: list[ManifestEntry] = Field(default_factory=list)
+    download_summary: Optional[DownloadSummary] = None
 
     def by_paper_id(self) -> dict[str, ManifestEntry]:
         return {e.paper_id: e for e in self.entries}

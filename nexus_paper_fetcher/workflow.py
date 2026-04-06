@@ -9,6 +9,7 @@ from typing import Optional, Protocol
 
 import typer
 
+from nexus_paper_fetcher.download.manifest import DownloadSummary, Manifest
 from nexus_paper_fetcher.download.pipeline import run_download_for_result
 from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
 from nexus_paper_fetcher.nlp import parse_natural_language_query, prepare_query
@@ -36,7 +37,8 @@ class FetchWorkflowResult:
     saved_result_path: Path
     download_requested: bool
     download_executed: bool
-    download_manifest: object | None
+    download_manifest: Manifest | None
+    download_summary: DownloadSummary | None = None
     download_top: int | None = None
     output_dir: Path | None = None
 
@@ -111,6 +113,26 @@ def _validated_download_top(value: Optional[int]) -> Optional[int]:
     return value
 
 
+def _existing_results_file(query: str) -> Optional[Path]:
+    candidate = Path(query).expanduser()
+    if candidate.suffix.lower() != ".json":
+        return None
+    if not candidate.exists() or not candidate.is_file():
+        return None
+    return candidate
+
+
+def _load_run_result(path: Path) -> RunResult:
+    with open(path, encoding="utf-8") as handle:
+        return RunResult.model_validate(json.load(handle))
+
+
+def _manifest_summary(manifest: Manifest | None) -> DownloadSummary | None:
+    if manifest is None:
+        return None
+    return getattr(manifest, "download_summary", None)
+
+
 async def run_fetch_workflow(
     *,
     query: str,
@@ -124,6 +146,7 @@ async def run_fetch_workflow(
     keyword_count: Optional[int] = None,
     no_keyword_expansion: bool = False,
     output: Optional[Path] = None,
+    results_output_dir: Optional[Path] = None,
     interactive: bool = True,
     download: bool = False,
     output_dir: Optional[Path] = None,
@@ -135,11 +158,69 @@ async def run_fetch_workflow(
     chosen_download_top = _validated_download_top(download_top)
     normalized_output_dir = output_dir.expanduser() if output_dir is not None else None
     normalized_output = output.expanduser() if output is not None else None
+    normalized_results_output_dir = (
+        results_output_dir.expanduser() if results_output_dir is not None else None
+    )
 
     if not interactive and download and normalized_output_dir is None:
         raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
 
+    if (results_file := _existing_results_file(query)) is not None:
+        result = _load_run_result(results_file)
+        preview = result.papers[:10]
+
+        effective_download_requested = True
+        effective_download_top = chosen_download_top
+        if not interactive and normalized_output_dir is None:
+            raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
+
+        chosen_output_dir = normalized_output_dir
+        if interactive and chosen_output_dir is None:
+            chosen_output_dir = Path(prompts.prompt("Download output directory", default="papers")).expanduser()
+        if chosen_output_dir is None:
+            raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
+
+        if effective_download_top is None:
+            if interactive:
+                raw_top = prompts.prompt(
+                    "How many papers to download? (blank = all downloadable results)",
+                    default="",
+                )
+                stripped = raw_top.strip()
+                if stripped:
+                    try:
+                        effective_download_top = _validated_download_top(int(stripped))
+                    except ValueError as exc:
+                        raise typer.BadParameter("download-top must be a positive integer") from exc
+            else:
+                effective_download_top = None
+
+        manifest = await run_download_for_result(
+            result,
+            chosen_output_dir,
+            top_n=effective_download_top,
+            source_label=str(results_file),
+        )
+        return FetchWorkflowResult(
+            result=result,
+            preview_papers=preview,
+            saved_result_path=results_file,
+            download_requested=effective_download_requested,
+            download_executed=True,
+            download_manifest=manifest,
+            download_summary=_manifest_summary(manifest),
+            download_top=effective_download_top,
+            output_dir=chosen_output_dir,
+        )
+
     search_query, parsed_domain = await parse_natural_language_query(query)
+    effective_download_requested = bool(download or search_query.download_requested)
+    effective_download_top = chosen_download_top
+    if effective_download_top is None:
+        effective_download_top = _validated_download_top(search_query.download_top_n)
+
+    if not interactive and effective_download_requested and normalized_output_dir is None:
+        raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
 
     search_query.top_n = top_n
     if year_from is not None:
@@ -164,21 +245,36 @@ async def run_fetch_workflow(
     if not result.papers:
         raise ValueError("No papers found for query")
 
-    out_path = normalized_output or _auto_output_path(query, search_query.top_n)
+    out_path = normalized_output or _auto_output_path(search_query.query, search_query.top_n)
+    if normalized_output is None and normalized_results_output_dir is not None:
+        out_path = normalized_results_output_dir / out_path.name
     _write_result(result, out_path)
     preview = result.papers[:10]
+    lookup_without_exact_match = result.not_found and (
+        search_query.query_intent == "paper_lookup" or bool(search_query.paper_titles)
+    )
 
-    download_requested = False
+    download_requested = effective_download_requested
     download_executed = False
     chosen_output_dir = normalized_output_dir
     manifest = None
 
     if interactive:
-        download_requested = bool(download)
-        if not download_requested:
+        if not download_requested and not lookup_without_exact_match:
             download_requested = prompts.confirm("Download PDFs for these results?", default=False)
-    else:
-        download_requested = bool(download)
+
+    if lookup_without_exact_match:
+        return FetchWorkflowResult(
+            result=result,
+            preview_papers=preview,
+            saved_result_path=out_path,
+            download_requested=download_requested,
+            download_executed=False,
+            download_manifest=None,
+            download_summary=None,
+            download_top=None,
+            output_dir=None,
+        )
 
     if download_requested:
         if interactive and chosen_output_dir is None:
@@ -186,9 +282,12 @@ async def run_fetch_workflow(
         if chosen_output_dir is None:
             raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
 
-        if chosen_download_top is None:
+        if effective_download_top is None:
             if interactive:
-                raw_top = prompts.prompt("How many top papers to download? (blank = all found)", default="")
+                raw_top = prompts.prompt(
+                    "How many papers to download? (blank = all downloadable results)",
+                    default="",
+                )
                 stripped = raw_top.strip()
                 if stripped:
                     try:
@@ -197,16 +296,14 @@ async def run_fetch_workflow(
                         raise typer.BadParameter(
                             "download-top must be a positive integer"
                         ) from exc
-                    chosen_download_top = _validated_download_top(parsed_top)
-                else:
-                    chosen_download_top = len(result.papers)
+                    effective_download_top = _validated_download_top(parsed_top)
             else:
-                chosen_download_top = len(result.papers)
+                effective_download_top = None
 
         manifest = await run_download_for_result(
             result,
             chosen_output_dir,
-            top_n=chosen_download_top,
+            top_n=effective_download_top,
         )
         download_executed = True
 
@@ -217,6 +314,7 @@ async def run_fetch_workflow(
         download_requested=download_requested,
         download_executed=download_executed,
         download_manifest=manifest,
-        download_top=chosen_download_top,
+        download_summary=_manifest_summary(manifest),
+        download_top=effective_download_top,
         output_dir=chosen_output_dir,
     )

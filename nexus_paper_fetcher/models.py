@@ -36,6 +36,8 @@ class SearchQuery(BaseModel):
     keyword_logic: str = "AUTO"
     query_intent: str = "domain_search"
     search_scope: Optional[str] = None
+    download_requested: bool = False
+    download_top_n: Optional[int] = None
 
     def resolved_fetch_per_source(self) -> int:
         return self.fetch_per_source or max(3 * self.top_n, 100)

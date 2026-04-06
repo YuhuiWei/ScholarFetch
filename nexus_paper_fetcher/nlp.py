@@ -32,6 +32,8 @@ Return a JSON object with these fields (all optional except query):
   publication_categories array[string] — paper categories such as primary_research, review,
                                          methods, data, perspective, comment
   keyword_logic string — AND or OR when the user explicitly describes boolean keyword relations
+  download_requested boolean — true when the user explicitly asks to download results
+  download_top_n integer — number of papers to download when the user specifies it
 
 Examples:
   "papers on attention mechanisms after 2020"
@@ -57,6 +59,12 @@ Examples:
 
   "find the papers Attention Is All You Need and BERT"
   → {"query": "Attention Is All You Need BERT", "query_intent": "paper_lookup", "paper_titles": ["Attention Is All You Need", "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"]}
+
+  "download 10 papers about graph transformers"
+  → {"query": "graph transformers", "top_n": 10, "query_intent": "domain_search", "download_requested": true, "download_top_n": 10}
+
+  "download the paper Attention Is All You Need"
+  → {"query": "Attention Is All You Need", "query_intent": "paper_lookup", "paper_titles": ["Attention Is All You Need"], "download_requested": true}
 
   "show more cited transformer papers from top tier CS conferences"
   → {"query": "transformer papers", "weight_preferences": ["citation"], "venue_preferences": ["top tier cs conference"]}
@@ -90,7 +98,7 @@ def _fallback_keyword_count(text: str) -> Optional[int]:
 
 def _fallback_top_n(text: str, default_top_n: int) -> int:
     lowered = text.lower()
-    match = re.search(r"\b(?:top|find|show|list|return)\s+(\d+)\b", lowered)
+    match = re.search(r"\b(?:top|find|show|list|return|download)\s+(\d+)\b", lowered)
     if match:
         return int(match.group(1))
     return default_top_n
@@ -98,6 +106,29 @@ def _fallback_top_n(text: str, default_top_n: int) -> int:
 
 def _fallback_paper_titles(text: str) -> list[str]:
     return [match.strip() for match in re.findall(r'"([^"]+)"', text) if match.strip()]
+
+
+def _fallback_download_request(text: str) -> tuple[bool, Optional[int], str]:
+    lowered = text.lower().strip()
+    if not lowered.startswith("download"):
+        return False, None, text
+
+    count_match = re.match(r"download\s+(\d+)\s+papers?\s+(?:about|on|for)\s+(.+)$", text, flags=re.IGNORECASE)
+    if count_match:
+        return True, int(count_match.group(1)), count_match.group(2).strip()
+
+    paper_match = re.match(r"download\s+the\s+paper\s+(.+)$", text, flags=re.IGNORECASE)
+    if paper_match:
+        cleaned = paper_match.group(1).strip()
+        if cleaned.startswith('"') and cleaned.endswith('"') and len(cleaned) >= 2:
+            cleaned = cleaned[1:-1].strip()
+        return True, None, cleaned
+
+    generic_match = re.match(r"download\s+papers?\s+(?:about|on|for)\s+(.+)$", text, flags=re.IGNORECASE)
+    if generic_match:
+        return True, None, generic_match.group(1).strip()
+
+    return True, None, text
 
 
 def _fallback_query_intent(text: str, paper_titles: list[str]) -> str:
@@ -215,6 +246,7 @@ async def parse_natural_language_query(
     printing a one-time hint to stderr.
     """
     if not config.OPENAI_API_KEY:
+        download_requested, download_top_n, cleaned_query = _fallback_download_request(text)
         print(
             "[nexus] OPENAI_API_KEY not set — treating input as raw query string.\n"
             "[nexus]   NLP parsing disabled. To enable natural language input:\n"
@@ -223,15 +255,21 @@ async def parse_natural_language_query(
         )
         return (
             SearchQuery(
-                query=text,
+                query=(
+                    paper_titles[0]
+                    if (paper_titles := _fallback_paper_titles(text)) and download_requested
+                    else cleaned_query
+                ),
                 top_n=_fallback_top_n(text, default_top_n),
                 keyword_count=_fallback_keyword_count(text),
-                paper_titles=(paper_titles := _fallback_paper_titles(text)),
+                paper_titles=paper_titles,
                 weight_preferences=_fallback_weight_preferences(text),
                 venue_preferences=_fallback_venue_preferences(text),
                 publication_categories=_fallback_publication_categories(text),
                 keyword_logic=_fallback_keyword_logic(text),
                 query_intent=_fallback_query_intent(text, paper_titles),
+                download_requested=download_requested,
+                download_top_n=download_top_n,
             ),
             None,
         )
@@ -271,23 +309,36 @@ async def parse_natural_language_query(
                 data.get("query_intent")
                 or _fallback_query_intent(text, paper_titles)
             ),
+            download_requested=bool(data.get("download_requested")),
+            download_top_n=(
+                int(data["download_top_n"])
+                if data.get("download_top_n") is not None
+                else None
+            ),
         )
         domain = data.get("domain_category") or None
         return sq, domain
 
     except Exception as e:
         logger.warning("NLP parsing failed (%s) — falling back to raw query", e)
+        download_requested, download_top_n, cleaned_query = _fallback_download_request(text)
         return (
             SearchQuery(
-                query=text,
+                query=(
+                    paper_titles[0]
+                    if (paper_titles := _fallback_paper_titles(text)) and download_requested
+                    else cleaned_query
+                ),
                 top_n=_fallback_top_n(text, default_top_n),
                 keyword_count=_fallback_keyword_count(text),
-                paper_titles=(paper_titles := _fallback_paper_titles(text)),
+                paper_titles=paper_titles,
                 weight_preferences=_fallback_weight_preferences(text),
                 venue_preferences=_fallback_venue_preferences(text),
                 publication_categories=_fallback_publication_categories(text),
                 keyword_logic=_fallback_keyword_logic(text),
                 query_intent=_fallback_query_intent(text, paper_titles),
+                download_requested=download_requested,
+                download_top_n=download_top_n,
             ),
             None,
         )

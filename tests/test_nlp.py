@@ -147,3 +147,37 @@ async def test_parse_natural_language_query_fallback_reads_requested_result_coun
     )
 
     assert search_query.top_n == 10
+
+
+async def test_parse_natural_language_query_fallback_detects_domain_download_intent(monkeypatch):
+    import nexus_paper_fetcher.nlp as nlp
+
+    monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+
+    search_query, domain = await parse_natural_language_query(
+        "download 10 papers about graph transformers"
+    )
+
+    assert domain is None
+    assert search_query.query == "graph transformers"
+    assert search_query.top_n == 10
+    assert search_query.download_requested is True
+    assert search_query.download_top_n == 10
+    assert search_query.query_intent == "domain_search"
+
+
+async def test_parse_natural_language_query_fallback_detects_lookup_download_intent(monkeypatch):
+    import nexus_paper_fetcher.nlp as nlp
+
+    monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
+
+    search_query, domain = await parse_natural_language_query(
+        'download the paper "Attention Is All You Need"'
+    )
+
+    assert domain is None
+    assert search_query.query == "Attention Is All You Need"
+    assert search_query.paper_titles == ["Attention Is All You Need"]
+    assert search_query.download_requested is True
+    assert search_query.download_top_n is None
+    assert search_query.query_intent == "paper_lookup"
