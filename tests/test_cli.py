@@ -35,11 +35,13 @@ def test_fetch_delegates_to_run_fetch_workflow(tmp_path, monkeypatch):
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     runner = CliRunner()
@@ -60,11 +62,13 @@ def test_fetch_forwards_non_interactive_download_flags(tmp_path, monkeypatch):
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     output_dir = tmp_path / "papers"
@@ -102,11 +106,13 @@ def test_fetch_forwards_natural_language_download_phrase_to_workflow(tmp_path, m
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     runner = CliRunner()
@@ -127,11 +133,13 @@ def test_fetch_forwards_existing_results_json_to_workflow(tmp_path, monkeypatch)
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     results_path = tmp_path / "saved-results.json"
@@ -155,11 +163,13 @@ def test_fetch_forwards_existing_fetch_controls_to_workflow(tmp_path, monkeypatc
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     out_path = tmp_path / "forwarded.json"
@@ -208,11 +218,13 @@ def test_fetch_forwards_keyword_count_to_workflow(tmp_path, monkeypatch):
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     runner = CliRunner()
@@ -240,11 +252,13 @@ def test_fetch_forwards_no_keyword_expansion_to_workflow(tmp_path, monkeypatch):
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     runner = CliRunner()
@@ -273,16 +287,19 @@ def test_shell_command_processes_queries_until_quit(tmp_path, monkeypatch):
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("shell should delegate parsing to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("shell should delegate preparation to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "run",
         AsyncMock(side_effect=AssertionError("shell should delegate execution to workflow layer")),
+        raising=False,
     )
 
     runner = CliRunner()
@@ -316,11 +333,13 @@ def test_fetch_leaves_scope_keyword_strategy_to_workflow(tmp_path, monkeypatch):
         cli,
         "parse_natural_language_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
     monkeypatch.setattr(
         cli,
         "prepare_query",
         AsyncMock(side_effect=AssertionError("fetch should delegate to workflow layer")),
+        raising=False,
     )
 
     runner = CliRunner()

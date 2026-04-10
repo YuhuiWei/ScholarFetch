@@ -215,6 +215,7 @@ async def run_fetch_workflow(
             chosen_output_dir,
             top_n=effective_download_top,
             source_label=str(results_file),
+            result_json_path=results_file,
         )
         return FetchWorkflowResult(
             result=result,
@@ -343,6 +344,7 @@ async def run_fetch_workflow(
             result,
             chosen_output_dir,
             top_n=effective_download_top,
+            result_json_path=out_path,
         )
         download_executed = True
 

@@ -728,3 +728,94 @@ def test_cli_output_dir_help_mentions_downloaded_files():
     assert result.exit_code == 0
     assert "Directory to save downloaded files" in result.output
     assert "Directory to save PDFs" not in result.output
+
+
+# ── ScholarWiki-mode tests (result_json_path provided) ────────────────────────
+
+def _make_result(papers, tmp_path) -> tuple[RunResult, Path]:
+    sq = SearchQuery(query="test", top_n=len(papers))
+    result = RunResult(
+        query="test", domain_category=["biology"],
+        params=sq, sources_used=["openalex"],
+        papers=papers, timestamp=__import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        ),
+    )
+    path = tmp_path / "results" / "test" / "2026-04-09_top10.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(result.model_dump(mode="json"), default=str))
+    return result, path
+
+
+async def test_download_updates_paper_status_in_result_json(tmp_path, monkeypatch):
+    paper = Paper.create(
+        title="Test Paper", doi="10.1/test", year=2024, sources=["openalex"],
+        open_access_pdf_url="http://example.com/paper.pdf",
+    )
+    result, result_path = _make_result([paper], tmp_path)
+    output_dir = tmp_path / "papers"
+    output_dir.mkdir()
+
+    async def fake_resolve(paper, rank, output_dir, session):
+        pdf_path = str(output_dir / "rank_01_test_paper.pdf")
+        Path(pdf_path).write_bytes(b"%PDF-1.4")
+        return ManifestEntry(
+            paper_id=paper.paper_id, title=paper.title, rank=rank,
+            score=0.8, status="success", source_used="open_access_url",
+            file_path=pdf_path, file_size_kb=1,
+        )
+
+    import nexus_paper_fetcher.download.pipeline as dl_pipe
+    monkeypatch.setattr(dl_pipe, "resolve", fake_resolve)
+
+    await run_download_for_result(result, output_dir, result_json_path=result_path)
+
+    updated = RunResult.model_validate(json.loads(result_path.read_text()))
+    assert updated.papers[0].download_status == "success"
+    assert updated.papers[0].download_file_path is not None
+
+
+async def test_download_creates_manual_md_for_failed(tmp_path, monkeypatch):
+    paper = Paper.create(
+        title="Paywalled Paper", doi="10.1/pay", year=2024, sources=["openalex"],
+    )
+    result, result_path = _make_result([paper], tmp_path)
+    output_dir = tmp_path / "papers"
+    output_dir.mkdir()
+
+    async def fake_resolve(paper, rank, output_dir, session):
+        return ManifestEntry(
+            paper_id=paper.paper_id, title=paper.title, rank=rank,
+            score=0.8, status="failed", error="no source",
+        )
+
+    import nexus_paper_fetcher.download.pipeline as dl_pipe
+    monkeypatch.setattr(dl_pipe, "resolve", fake_resolve)
+
+    await run_download_for_result(result, output_dir, result_json_path=result_path)
+
+    assert (output_dir / "manual.md").exists()
+    md = (output_dir / "manual.md").read_text()
+    assert "Paywalled Paper" in md
+
+
+async def test_download_does_not_write_manifest_json(tmp_path, monkeypatch):
+    paper = Paper.create(
+        title="Any Paper", doi="10.1/any", year=2024, sources=["openalex"],
+    )
+    result, result_path = _make_result([paper], tmp_path)
+    output_dir = tmp_path / "papers"
+    output_dir.mkdir()
+
+    async def fake_resolve(paper, rank, output_dir, session):
+        return ManifestEntry(
+            paper_id=paper.paper_id, title=paper.title, rank=rank,
+            score=0.8, status="failed", error="no source",
+        )
+
+    import nexus_paper_fetcher.download.pipeline as dl_pipe
+    monkeypatch.setattr(dl_pipe, "resolve", fake_resolve)
+
+    await run_download_for_result(result, output_dir, result_json_path=result_path)
+
+    assert not (output_dir / "manifest.json").exists()
