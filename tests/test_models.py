@@ -51,3 +51,38 @@ def test_score_breakdown_defaults():
     s = ScoreBreakdown()
     assert s.relevance == 0.5  # default when no OpenAI key
     assert s.composite == 0.0
+
+
+def test_paper_download_status_defaults_none():
+    p = Paper.create(title="T", sources=["openalex"])
+    assert p.download_status is None
+    assert p.download_file_path is None
+    assert p.domain_tags == []
+
+
+def test_paper_download_status_roundtrips():
+    p = Paper.create(title="T", sources=["openalex"])
+    p.download_status = "success"
+    p.download_file_path = "/papers/t.pdf"
+    p.domain_tags = ["scRNA-seq", "cell atlas"]
+    data = p.model_dump()
+    p2 = Paper.model_validate(data)
+    assert p2.download_status == "success"
+    assert p2.download_file_path == "/papers/t.pdf"
+    assert p2.domain_tags == ["scRNA-seq", "cell atlas"]
+
+
+def test_searchquery_slug_and_expand_defaults():
+    q = SearchQuery(query="attention mechanisms")
+    assert q.query_slug == ""
+    assert q.expand_existing is False
+
+
+def test_runresult_expanded_from_defaults_none():
+    from datetime import datetime, timezone
+    r = RunResult(
+        query="q", domain_category=["cs_ml"], params=SearchQuery(query="q"),
+        sources_used=[], papers=[],
+        timestamp=datetime.now(timezone.utc),
+    )
+    assert r.expanded_from is None

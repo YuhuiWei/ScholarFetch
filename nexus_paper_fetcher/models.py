@@ -1,8 +1,8 @@
 from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Literal, Optional, Union
+from pydantic import BaseModel, Field, field_validator
 
 
 def _derive_paper_id(
@@ -38,6 +38,9 @@ class SearchQuery(BaseModel):
     search_scope: Optional[str] = None
     download_requested: bool = False
     download_top_n: Optional[int] = None
+    query_slug: str = ""          # computed from query; drives results/<slug>/ directory
+    expand_existing: bool = False  # when True, exclude already-found paper_ids
+    exclude_ids: set[str] = Field(default_factory=set)
 
     def resolved_fetch_per_source(self) -> int:
         return self.fetch_per_source or max(3 * self.top_n, 100)
@@ -79,6 +82,11 @@ class Paper(BaseModel):
     title_match_score: float = 0.0
     exact_match: bool = False
     scores: ScoreBreakdown = Field(default_factory=ScoreBreakdown)
+    # Download tracking (populated by Phase 2)
+    download_status: Optional[Literal["success", "failed", "not_attempted"]] = None
+    download_file_path: Optional[str] = None  # absolute path to downloaded file
+    # Keyword expansion tags (populated from NLP step)
+    domain_tags: list[str] = Field(default_factory=list)
 
     @classmethod
     def create(
@@ -96,8 +104,16 @@ class Paper(BaseModel):
 
 class RunResult(BaseModel):
     query: str
-    domain_category: str
+    domain_category: list[str]
     params: SearchQuery
+
+    @field_validator("domain_category", mode="before")
+    @classmethod
+    def _coerce_domain_category(cls, v: Union[str, list]) -> list[str]:
+        """Accept a bare string for backward compatibility with saved JSON files."""
+        if isinstance(v, str):
+            return [v]
+        return v
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sources_used: list[str]
     sources_failed: list[str] = Field(default_factory=list)
@@ -105,3 +121,4 @@ class RunResult(BaseModel):
     not_found: bool = False
     match_strategy: Optional[str] = None
     output_path: Optional[str] = None
+    expanded_from: Optional[str] = None  # path to the result file this search expanded
