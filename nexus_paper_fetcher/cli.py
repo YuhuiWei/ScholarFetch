@@ -7,6 +7,7 @@ from typing import Optional
 import typer
 
 from nexus_paper_fetcher.download.cli import download_command
+from nexus_paper_fetcher.search import search_results
 from nexus_paper_fetcher.workflow import run_fetch_workflow
 
 app = typer.Typer(help="Nexus Paper Fetcher — ranked academic paper search")
@@ -124,6 +125,7 @@ def fetch(
         help="Non-interactive mode (skip prompts and use provided flags)",
     ),
     output: Optional[Path] = typer.Option(None, "--output"),
+    expand: bool = typer.Option(False, "--expand", help="Expand existing search results with new papers"),
 ) -> None:
     async def _run() -> None:
         workflow_result = await run_fetch_workflow(
@@ -144,6 +146,7 @@ def fetch(
             download_top=download_top,
             yes=yes,
             prompt_io=_TyperPromptAdapter(),
+            expand_existing=expand,
         )
         _print_summary(
             workflow_result.result,
@@ -188,3 +191,44 @@ def shell(
             )
 
         asyncio.run(_run(q))
+
+
+@app.command()
+def search(
+    query: str = typer.Argument("", help="Keywords to search (empty = list all)"),
+    not_downloadable: bool = typer.Option(
+        False, "--not-downloadable", help="Only show papers with failed or no download"
+    ),
+    downloaded: bool = typer.Option(
+        False, "--downloaded", help="Only show successfully downloaded papers"
+    ),
+    domain: Optional[str] = typer.Option(
+        None, "--domain", help="Restrict to a specific query-slug subdirectory"
+    ),
+) -> None:
+    """Search across saved result JSONs (no API calls)."""
+    hits = search_results(
+        query,
+        results_dir=Path("results"),
+        not_downloadable=not_downloadable,
+        downloaded_only=downloaded,
+        domain_slug=domain,
+    )
+    if not hits:
+        print("[nexus] no results found", file=sys.stderr)
+        return
+    header = f"\n{'Rank':>4}  {'Score':>5}  {'DL':>4}  {'Year':>4}  {'Venue':<18}  Title"
+    print(header)
+    for hit in hits[:50]:
+        dl = {
+            "success": " ok",
+            "failed": "fail",
+            "not_attempted": "skip",
+            None: "   —",
+        }.get(hit.paper.download_status, "   —")
+        venue = (hit.paper.venue or "—")[:18]
+        title = (hit.paper.title or "")[:55]
+        year = str(hit.paper.year or "—")
+        score = f"{hit.paper.scores.composite:.3f}"
+        print(f"{hit.rank:>4}  {score:>5}  {dl:>4}  {year:>4}  {venue:<18}  {title}")
+    print(f"\n[nexus] {len(hits)} results", file=sys.stderr)

@@ -457,3 +457,48 @@ def test_download_top_must_be_positive(tmp_path):
 
     assert result.exit_code == 2
     assert "top must be a positive integer" in result.output
+
+
+def test_fetch_expand_flag_passes_expand_existing(tmp_path, monkeypatch):
+    """--expand flag is threaded through to run_fetch_workflow."""
+    called_with = {}
+
+    async def fake_workflow(**kwargs):
+        called_with.update(kwargs)
+        return _workflow_result(tmp_path)
+
+    monkeypatch.setattr(cli, "run_fetch_workflow", fake_workflow, raising=False)
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["fetch", "test query", "--expand",
+                                     "--output", str(tmp_path / "r.json")])
+    assert result.exit_code == 0, result.output
+    assert called_with.get("expand_existing") is True
+
+
+def test_search_command_prints_results(tmp_path, monkeypatch):
+    """nexus search <query> invokes search_results and prints hits."""
+    from nexus_paper_fetcher.models import Paper
+    from nexus_paper_fetcher.search import SearchHit
+
+    fake_paper = Paper.create(title="Test Hit Paper", year=2024, sources=["openalex"])
+    fake_paper.scores.composite = 0.85
+    fake_hit = SearchHit(paper=fake_paper, score=90.0, source_file=tmp_path / "r.json", rank=1)
+
+    monkeypatch.setattr(cli, "search_results", lambda *a, **kw: [fake_hit], raising=False)
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["search", "test query"])
+    assert result.exit_code == 0
+    assert "Test Hit Paper" in result.output
+
+
+def test_search_command_not_downloadable_flag(tmp_path, monkeypatch):
+    calls = {}
+
+    def fake_search(query, *, results_dir, not_downloadable, downloaded_only, domain_slug, **kw):
+        calls["not_downloadable"] = not_downloadable
+        return []
+
+    monkeypatch.setattr(cli, "search_results", fake_search, raising=False)
+    runner = CliRunner()
+    runner.invoke(cli.app, ["search", "--not-downloadable"])
+    assert calls.get("not_downloadable") is True
