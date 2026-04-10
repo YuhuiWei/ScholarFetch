@@ -1,16 +1,11 @@
 from __future__ import annotations
 import asyncio
-import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import typer
 
-from nexus_paper_fetcher.models import SearchQuery
-from nexus_paper_fetcher.pipeline import run
-from nexus_paper_fetcher.nlp import parse_natural_language_query, prepare_query
 from nexus_paper_fetcher.download.cli import download_command
 from nexus_paper_fetcher.workflow import run_fetch_workflow
 
@@ -21,21 +16,6 @@ app.command("download")(download_command)
 @app.callback()
 def main() -> None:
     """Nexus Paper Fetcher — ranked academic paper search"""
-
-
-def _auto_output_path(query: str, top_n: int) -> Path:
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    import re
-    slug = re.sub(r"[^\w]", "-", query.lower())[:40].strip("-")
-    Path("results").mkdir(exist_ok=True)
-    return Path("results") / f"{date_str}_{slug}_top{top_n}.json"
-
-
-def _write_result(result, out_path: Path) -> None:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    result.output_path = str(out_path)
-    with open(out_path, "w") as f:
-        json.dump(result.model_dump(mode="json"), f, indent=2, default=str)
 
 
 class _TyperPromptAdapter:

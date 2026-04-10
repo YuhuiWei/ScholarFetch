@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +13,7 @@ from nexus_paper_fetcher.download.pipeline import run_download_for_result
 from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
 from nexus_paper_fetcher.nlp import parse_natural_language_query, prepare_query
 from nexus_paper_fetcher.pipeline import run
+from nexus_paper_fetcher.slugs import make_query_slug
 
 
 class PromptIO(Protocol):
@@ -43,11 +43,25 @@ class FetchWorkflowResult:
     output_dir: Path | None = None
 
 
-def _auto_output_path(query: str, top_n: int) -> Path:
+def _make_result_path(query: str, top_n: int) -> Path:
+    """Return results/<slug>/YYYY-MM-DD_top<N>.json (creates dir if needed)."""
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    slug = re.sub(r"[^\w]", "-", query.lower())[:40].strip("-")
-    Path("results").mkdir(exist_ok=True)
-    return Path("results") / f"{date_str}_{slug}_top{top_n}.json"
+    slug = make_query_slug(query)
+    dir_path = Path("results") / slug
+    dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path / f"{date_str}_top{top_n}.json"
+
+
+def _find_existing_results(query: str) -> Optional[tuple[Path, list[Path]]]:
+    """Return (slug_dir, files_newest_first) if prior results exist, else None."""
+    slug = make_query_slug(query)
+    dir_path = Path("results") / slug
+    if not dir_path.exists():
+        return None
+    files = sorted(dir_path.glob("*.json"), reverse=True)
+    if not files:
+        return None
+    return dir_path, files
 
 
 def _write_result(result: RunResult, out_path: Path) -> None:
@@ -245,7 +259,7 @@ async def run_fetch_workflow(
     if not result.papers:
         raise ValueError("No papers found for query")
 
-    out_path = normalized_output or _auto_output_path(search_query.query, search_query.top_n)
+    out_path = normalized_output or _make_result_path(search_query.query, search_query.top_n)
     if normalized_output is None and normalized_results_output_dir is not None:
         out_path = normalized_results_output_dir / out_path.name
     _write_result(result, out_path)

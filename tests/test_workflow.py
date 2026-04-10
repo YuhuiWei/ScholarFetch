@@ -875,3 +875,35 @@ async def test_expands_explicit_output_path_before_writing(
     expected_output = Path("~/result.json").expanduser()
     assert workflow_result.saved_result_path == expected_output
     assert captured["out_path"] == expected_output
+
+
+# --- slug-based path tests ---
+
+def test_make_result_path_uses_slug(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from nexus_paper_fetcher.workflow import _make_result_path
+    p = _make_result_path("single-cell RNA sequencing", 20)
+    assert "single-cell-rna-sequencing" in str(p)
+    assert p.suffix == ".json"
+    assert p.parent.name == "single-cell-rna-sequencing"
+
+
+def test_find_existing_results_none_when_dir_missing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from nexus_paper_fetcher.workflow import _find_existing_results
+    assert _find_existing_results("attention mechanisms") is None
+
+
+def test_find_existing_results_returns_sorted_files(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from nexus_paper_fetcher.workflow import _find_existing_results
+    slug_dir = tmp_path / "results" / "attention-mechanisms"
+    slug_dir.mkdir(parents=True)
+    old = slug_dir / "2026-04-01_top20.json"
+    new = slug_dir / "2026-04-08_top20.json"
+    old.write_text("{}")
+    new.write_text("{}")
+    found = _find_existing_results("attention mechanisms")
+    assert found is not None
+    files = found[1]
+    assert files[0].name == "2026-04-08_top20.json"  # most recent first
