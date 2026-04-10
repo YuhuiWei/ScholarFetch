@@ -879,6 +879,65 @@ async def test_expands_explicit_output_path_before_writing(
 
 # --- slug-based path tests ---
 
+async def test_expand_existing_excludes_prior_papers(tmp_path, monkeypatch):
+    """When expand_existing=True, previously found paper_ids are excluded from dedup."""
+    import json
+    from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
+    from datetime import datetime, timezone
+
+    monkeypatch.chdir(tmp_path)
+
+    existing_paper = Paper.create(
+        title="Old Paper", doi="10.1/old", year=2024, sources=["openalex"]
+    )
+    existing_result = RunResult(
+        query="attention mechanisms", domain_category=["cs_ml"],
+        params=SearchQuery(query="attention mechanisms"),
+        sources_used=["openalex"], papers=[existing_paper],
+        timestamp=datetime.now(timezone.utc),
+    )
+    slug_dir = tmp_path / "results" / "attention-mechanisms"
+    slug_dir.mkdir(parents=True)
+    result_file = slug_dir / "2026-04-01_top20.json"
+    result_file.write_text(json.dumps(existing_result.model_dump(mode="json"), default=str))
+
+    import nexus_paper_fetcher.workflow as wf
+
+    new_paper = Paper.create(
+        title="New Paper", doi="10.1/new", year=2025, sources=["openalex"]
+    )
+    mock_run = AsyncMock(return_value=RunResult(
+        query="attention mechanisms", domain_category=["cs_ml"],
+        params=SearchQuery(query="attention mechanisms"),
+        sources_used=["openalex"], papers=[new_paper],
+        timestamp=datetime.now(timezone.utc),
+    ))
+    monkeypatch.setattr(wf, "run", mock_run)
+
+    parse_mock = AsyncMock(return_value=(SearchQuery(query="attention mechanisms"), "cs_ml"))
+    prepare_mock = AsyncMock(return_value=None)
+    download_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(wf, "parse_natural_language_query", parse_mock)
+    monkeypatch.setattr(wf, "prepare_query", prepare_mock)
+    monkeypatch.setattr(wf, "run_download_for_result", download_mock)
+
+    from nexus_paper_fetcher.workflow import run_fetch_workflow
+    result = await run_fetch_workflow(
+        query="attention mechanisms",
+        top_n=20,
+        expand_existing=True,
+        interactive=False,
+        output_dir=None,
+    )
+    # The run() call should have received a SearchQuery with expand_existing=True
+    called_sq = mock_run.call_args[0][0]
+    assert called_sq.expand_existing is True
+    # Final result should contain BOTH old and new papers merged
+    titles = {p.title for p in result.result.papers}
+    assert "Old Paper" in titles
+    assert "New Paper" in titles
+
+
 def test_make_result_path_uses_slug(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from nexus_paper_fetcher.workflow import _make_result_path

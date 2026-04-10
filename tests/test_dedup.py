@@ -91,3 +91,18 @@ def test_three_source_merge():
     assert result[0].openalex_id == "W1"
     assert result[0].semantic_scholar_id == "SS1"
     assert result[0].openreview_tier == "spotlight"
+
+
+def test_deduplicate_excludes_known_ids():
+    p1 = Paper.create(title="Alpha Paper", doi="10.1/alpha", sources=["openalex"])
+    p2 = Paper.create(title="Beta Paper", doi="10.1/beta", sources=["openalex"])
+    result = deduplicate([p1, p2], exclude_ids={p1.paper_id})
+    ids = {p.paper_id for p in result}
+    assert p1.paper_id not in ids
+    assert p2.paper_id in ids
+
+
+def test_deduplicate_exclude_empty_set_is_noop():
+    p1 = Paper.create(title="Alpha Paper", doi="10.1/alpha", sources=["openalex"])
+    result = deduplicate([p1], exclude_ids=set())
+    assert len(result) == 1

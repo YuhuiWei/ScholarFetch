@@ -59,7 +59,9 @@ def _merge(papers: list[Paper]) -> Paper:
     return base
 
 
-def deduplicate(papers: list[Paper]) -> list[Paper]:
+def deduplicate(papers: list[Paper], exclude_ids: set[str] | None = None) -> list[Paper]:
+    if exclude_ids:
+        papers = [p for p in papers if p.paper_id not in exclude_ids]
     # Pass 1: DOI exact match
     doi_buckets: dict[str, list[Paper]] = defaultdict(list)
     no_doi: list[Paper] = []

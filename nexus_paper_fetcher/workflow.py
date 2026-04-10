@@ -167,6 +167,7 @@ async def run_fetch_workflow(
     download_top: Optional[int] = None,
     yes: bool = False,
     prompt_io: Optional[PromptIO] = None,
+    expand_existing: bool = False,
 ) -> FetchWorkflowResult:
     prompts = prompt_io or TyperPromptIO()
     chosen_download_top = _validated_download_top(download_top)
@@ -254,7 +255,31 @@ async def run_fetch_workflow(
 
     domain_override = domain_category or parsed_domain
     await prepare_query(search_query, domain_category_override=domain_override)
+
+    # Expand-existing: load prior paper_ids as exclusion set
+    prior_papers: list[Paper] = []
+    expanded_from_path: Optional[Path] = None
+    if expand_existing or search_query.expand_existing:
+        existing = _find_existing_results(search_query.query)
+        if existing:
+            _, files = existing
+            prior_result = _load_run_result(files[0])  # most recent
+            prior_papers = prior_result.papers
+            search_query.exclude_ids = {p.paper_id for p in prior_papers}
+            search_query.expand_existing = True
+            expanded_from_path = files[0]
+
     result = await run(search_query, domain_category_override=domain_override)
+
+    # Expand merge: prepend new papers, append prior papers not in new set
+    if prior_papers and (expand_existing or search_query.expand_existing):
+        new_ids = {p.paper_id for p in result.papers}
+        merged = list(result.papers) + [p for p in prior_papers if p.paper_id not in new_ids]
+        merged.sort(key=lambda p: p.scores.composite, reverse=True)
+        result = result.model_copy(update={
+            "papers": merged,
+            "expanded_from": str(expanded_from_path),
+        })
 
     if not result.papers:
         raise ValueError("No papers found for query")

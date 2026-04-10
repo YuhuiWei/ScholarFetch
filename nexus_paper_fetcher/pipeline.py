@@ -71,18 +71,19 @@ async def run(
     domain_category_override: Optional[str] = None,
 ) -> RunResult:
     # Step 1: classify domain
-    domain_category = await classify_domain(query.query, domain_category_override)
-    _err(f"[nexus] classifying domain... {domain_category}")
+    domain_categories = await classify_domain(query.query, domain_category_override)
+    domain_label = ", ".join(domain_categories)
+    _err(f"[nexus] classifying domain... {domain_label}")
     _err(f"[nexus] query intent... {query.query_intent}")
     if query.query_intent == "domain_search" and query.search_scope:
         _err(f"[nexus] search scope... {query.search_scope}")
 
-    # Step 2: parallel fetch
+    # Step 2: parallel fetch — include OpenReview whenever cs_ml is one of the domains
     active_fetchers = [OpenAlexFetcher(), SemanticScholarFetcher()]
-    if domain_category == "cs_ml":
+    if "cs_ml" in domain_categories:
         active_fetchers.append(OpenReviewFetcher())
     else:
-        _err(f"[nexus]   {'openreview':<20} –  skipped (domain: {domain_category})")
+        _err(f"[nexus]   {'openreview':<20} –  skipped (domain: {domain_label})")
 
     _err(
         f"[nexus] fetching from {len(active_fetchers)} sources "
@@ -110,7 +111,7 @@ async def run(
 
     # Step 3: dedup
     _err(f"[nexus] deduplicating {len(all_papers)} papers...")
-    unique = deduplicate(all_papers)
+    unique = deduplicate(all_papers, exclude_ids=query.exclude_ids or None)
     _err(f"[nexus] deduplicating → {len(unique)} unique")
 
     # Step 4: layered evaluation and score
@@ -129,7 +130,7 @@ async def run(
 
     suffix = " (relevance via OpenAI)" if cfg.OPENAI_API_KEY else " (relevance defaulting to 0.5)"
     _err(f"[nexus] scoring {len(candidates)} papers{suffix}...")
-    scored = await score_all(candidates, query.query, domain_category)
+    scored = await score_all(candidates, query.query, domain_categories)
 
     llm_targets = select_llm_candidates(scored, uncertain, query.top_n) if cfg.OPENAI_API_KEY else []
     if llm_targets:
@@ -145,7 +146,7 @@ async def run(
             )
         if llm_targets:
             _err(f"[nexus] llm evaluated {len(llm_targets)} papers")
-        scored = await score_all(llm_filtered_candidates, query.query, domain_category)
+        scored = await score_all(llm_filtered_candidates, query.query, domain_categories)
 
     # Step 5: rank and truncate
     not_found = False
@@ -159,7 +160,7 @@ async def run(
 
     return RunResult(
         query=query.query,
-        domain_category=domain_category,
+        domain_category=domain_categories,
         params=query,
         timestamp=datetime.now(timezone.utc),
         sources_used=sources_used,
