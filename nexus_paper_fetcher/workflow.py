@@ -150,7 +150,7 @@ def _manifest_summary(manifest: Manifest | None) -> DownloadSummary | None:
 async def run_fetch_workflow(
     *,
     query: str,
-    top_n: int = 20,
+    top_n: Optional[int] = None,
     year_from: Optional[int] = None,
     year_to: Optional[int] = None,
     author: Optional[str] = None,
@@ -238,7 +238,8 @@ async def run_fetch_workflow(
     if not interactive and effective_download_requested and normalized_output_dir is None:
         raise typer.BadParameter("output-dir is required when download is enabled in non-interactive mode")
 
-    search_query.top_n = top_n
+    if top_n is not None:
+        search_query.top_n = top_n  # CLI explicit override; otherwise keep NLP-parsed value
     if year_from is not None:
         search_query.year_from = year_from
     if year_to is not None:
@@ -289,7 +290,8 @@ async def run_fetch_workflow(
     if normalized_output is None and normalized_results_output_dir is not None:
         out_path = normalized_results_output_dir / out_path.name
     _write_result(result, out_path)
-    preview = result.papers[:10]
+    display_cutoff = result.top_n_count or len(result.papers)
+    preview = result.papers[:min(10, display_cutoff)]
     lookup_without_exact_match = result.not_found and (
         search_query.query_intent == "paper_lookup" or bool(search_query.paper_titles)
     )

@@ -18,9 +18,11 @@ async def test_pipeline_returns_top_n_sorted(sample_papers, monkeypatch):
         SearchQuery(query="gene expression", top_n=3),
         domain_category_override="biology",
     )
-    assert len(result.papers) == 3
+    # papers now contains all scored candidates; top_n_count is the display cutoff
+    assert result.top_n_count == 3
+    assert len(result.papers) >= 3  # at least top_n candidates
     scores = [p.scores.composite for p in result.papers]
-    assert scores == sorted(scores, reverse=True)
+    assert scores == sorted(scores, reverse=True)  # always sorted descending
 
 
 async def test_pipeline_partial_source_failure(sample_papers, monkeypatch):
@@ -93,7 +95,7 @@ async def test_pipeline_result_has_run_metadata(sample_papers, monkeypatch):
         domain_category_override="general",
     )
     assert result.query == "test query"
-    assert result.domain_category == "general"
+    assert result.domain_category == ["general"]
     assert result.timestamp is not None
     assert isinstance(result.sources_used, list)
 

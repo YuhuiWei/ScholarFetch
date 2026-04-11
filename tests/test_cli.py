@@ -9,7 +9,7 @@ from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
 
 def _workflow_result(tmp_path):
     return SimpleNamespace(
-        result=SimpleNamespace(papers=[]),
+        result=SimpleNamespace(papers=[], top_n_count=None),
         preview_papers=[],
         saved_result_path=tmp_path / "result.json",
         download_requested=False,

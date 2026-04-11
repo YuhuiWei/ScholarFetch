@@ -102,7 +102,7 @@ def _apply_keyword_strategy(
 @app.command()
 def fetch(
     query: str = typer.Argument(..., help="Research query or natural language description"),
-    top_n: int = typer.Option(20, "--top-n", help="Number of papers to return"),
+    top_n: Optional[int] = typer.Option(None, "--top-n", help="Number of papers to return (overrides NLP-parsed count)"),
     year_from: Optional[int] = typer.Option(None, "--year-from"),
     year_to: Optional[int] = typer.Option(None, "--year-to"),
     author: Optional[str] = typer.Option(None, "--author"),
@@ -148,10 +148,11 @@ def fetch(
             prompt_io=_TyperPromptAdapter(),
             expand_existing=expand,
         )
+        result = workflow_result.result
         _print_summary(
-            workflow_result.result,
+            result,
             papers=workflow_result.preview_papers,
-            ranked_count=len(workflow_result.result.papers),
+            ranked_count=result.top_n_count or len(result.papers),
             output_path=workflow_result.saved_result_path,
         )
 
@@ -183,10 +184,11 @@ def shell(
             if not workflow_result.result.papers:
                 print("[nexus] no papers returned", file=sys.stderr)
                 return
+            _r = workflow_result.result
             _print_summary(
-                workflow_result.result,
+                _r,
                 papers=workflow_result.preview_papers,
-                ranked_count=len(workflow_result.result.papers),
+                ranked_count=_r.top_n_count or len(_r.papers),
                 output_path=workflow_result.saved_result_path,
             )
 

@@ -78,6 +78,20 @@ def _note_year(note: dict, fallback_year: Optional[int] = None) -> Optional[int]
     return fallback_year
 
 
+def _openreview_pdf_url(note: dict, content: dict) -> Optional[str]:
+    """Derive a direct PDF URL from a note, preferring the content 'pdf' field."""
+    pdf_field = _get_field(content, "pdf")
+    if pdf_field:
+        if pdf_field.startswith("http"):
+            return pdf_field
+        # Relative path like "/pdf/abc123.pdf"
+        return f"https://openreview.net{pdf_field}" if pdf_field.startswith("/") else f"https://openreview.net/{pdf_field}"
+    forum_id = note.get("forum") or note.get("id")
+    if forum_id:
+        return f"https://openreview.net/pdf?id={forum_id}"
+    return None
+
+
 def _note_to_paper(
     note: dict,
     tier: Optional[str],
@@ -101,6 +115,7 @@ def _note_to_paper(
         venue=venue_label,
         authors=authors if isinstance(authors, list) else [],
         abstract=abstract,
+        open_access_pdf_url=_openreview_pdf_url(note, content),
         openreview_tier=tier or _infer_tier_from_venue(venue_label),
         publication_type="conference_paper",
         source_publication_types={"openreview": "conference_paper"},
@@ -225,14 +240,17 @@ class OpenReviewFetcher(BaseFetcher):
         year_to: int,
         limit: int,
     ) -> list[Paper]:
-        api_client = self._get_api_v2_client()
+        # OpenReviewClient and search_notes are synchronous; run them in a thread
+        # to avoid blocking the asyncio event loop (which would stall parallel fetchers).
+        api_client = await asyncio.to_thread(self._get_api_v2_client)
         page_size = max(1, min(config.OPENREVIEW_SEARCH_PAGE_SIZE, limit))
         offset = 0
         papers: list[Paper] = []
 
         while len(papers) < limit:
             batch_limit = page_size
-            notes = api_client.search_notes(
+            notes = await asyncio.to_thread(
+                api_client.search_notes,
                 term=query_text,
                 content="all",
                 group="all",

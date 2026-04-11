@@ -20,7 +20,8 @@ Return a JSON object with these fields (all optional except query):
   year_from      integer  — earliest publication year, or null
   year_to        integer  — latest publication year, or null
   author         string   — specific author name, or null
-  domain_category string  — one of: cs_ml, biology, chemistry, general, or null
+  domain_category string  — comma-separated subset of: cs_ml, biology, chemistry, general;
+                            list all applicable domains for interdisciplinary queries, or null
   query_intent   string   — one of: paper_lookup, domain_search
   keyword_count  integer  — number of expansion keywords to add; use 0 for no expansion,
                             3 for "less", 8 for "more", null when unspecified
@@ -62,6 +63,12 @@ Examples:
 
   "download 10 papers about graph transformers"
   → {"query": "graph transformers", "top_n": 10, "query_intent": "domain_search", "download_requested": true, "download_top_n": 10}
+
+  "large language model applications in biology and pharmacology"
+  → {"query": "large language model biology pharmacology", "domain_category": "cs_ml,biology"}
+
+  "10 papers from last year in cs domain about LLM in medical and clinical applications"
+  → {"query": "large language model medical clinical applications", "top_n": 10, "year_from": 2025, "domain_category": "cs_ml,biology"}
 
   "download the paper Attention Is All You Need"
   → {"query": "Attention Is All You Need", "query_intent": "paper_lookup", "paper_titles": ["Attention Is All You Need"], "download_requested": true}

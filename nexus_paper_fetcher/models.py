@@ -43,7 +43,7 @@ class SearchQuery(BaseModel):
     exclude_ids: set[str] = Field(default_factory=set)
 
     def resolved_fetch_per_source(self) -> int:
-        return self.fetch_per_source or max(3 * self.top_n, 100)
+        return self.fetch_per_source or max(self.top_n, 10)
 
 
 class ScoreBreakdown(BaseModel):
@@ -122,3 +122,4 @@ class RunResult(BaseModel):
     match_strategy: Optional[str] = None
     output_path: Optional[str] = None
     expanded_from: Optional[str] = None  # path to the result file this search expanded
+    top_n_count: Optional[int] = None    # display/rank cutoff; papers list may contain more candidates

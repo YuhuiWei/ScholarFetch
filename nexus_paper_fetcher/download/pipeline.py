@@ -222,9 +222,7 @@ async def _run_download_inplace(
     result_json_path: Path,
 ) -> None:
     """ScholarWiki-mode download: in-place JSON updates, progress tracker, manual.md."""
-    papers = run_result.papers
-    if top_n is not None:
-        papers = papers[:top_n]
+    papers = run_result.papers  # full candidate list; download loop stops at top_n successes
 
     output_dir.mkdir(parents=True, exist_ok=True)
     progress_path = output_dir / "download_progress.json"
@@ -236,9 +234,10 @@ async def _run_download_inplace(
     pending = [(rank, p) for rank, p in ranked_papers if p.paper_id not in already_done]
     skipped = len(ranked_papers) - len(pending)
 
+    target_msg = f", targeting {top_n} successes" if top_n is not None else ""
     _err(
         f"[nexus-dl] loading {source_label}  →  "
-        f"{len(papers)} papers ({skipped} already downloaded)"
+        f"{len(papers)} candidates{target_msg} ({skipped} already downloaded)"
     )
 
     # Restore status for already-downloaded papers

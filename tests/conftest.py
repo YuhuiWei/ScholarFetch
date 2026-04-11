@@ -1,5 +1,17 @@
 import pytest
+import nexus_paper_fetcher.config as _config
 from nexus_paper_fetcher.models import Paper
+
+
+@pytest.fixture(autouse=True)
+def _clear_openreview_credentials(monkeypatch):
+    """Prevent tests from making real OpenReview API calls.
+
+    The authenticated OpenReviewClient is synchronous and runs in a thread;
+    clearing credentials here ensures tests exercise the mocked httpx path.
+    """
+    monkeypatch.setattr(_config, "OPENREVIEW_USERNAME", "")
+    monkeypatch.setattr(_config, "OPENREVIEW_PASSWORD", "")
 
 
 @pytest.fixture

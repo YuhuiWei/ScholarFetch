@@ -155,8 +155,11 @@ async def run(
         top_n, not_found, match_strategy = _rank_lookup_results(scored, query)
         if not_found and top_n:
             _err("[nexus] exact paper match not found; returning closest matches")
+        all_papers_ranked = top_n
     else:
-        top_n = sorted(scored, key=lambda p: p.scores.composite, reverse=True)[: query.top_n]
+        # Store all scored candidates; top_n_count marks the display cutoff.
+        # Download logic uses the full list so it can keep trying past rank top_n.
+        all_papers_ranked = sorted(scored, key=lambda p: p.scores.composite, reverse=True)
 
     return RunResult(
         query=query.query,
@@ -165,7 +168,8 @@ async def run(
         timestamp=datetime.now(timezone.utc),
         sources_used=sources_used,
         sources_failed=sources_failed,
-        papers=top_n,
+        papers=all_papers_ranked,
+        top_n_count=query.top_n,
         not_found=not_found,
         match_strategy=match_strategy,
     )
