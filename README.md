@@ -9,8 +9,6 @@ Ranked academic paper search and full-text download pipeline. Fetches candidates
 ```
 Phase 1: scholar fetch     →  ranked JSON in results/<slug>/
 Phase 2: scholar download  →  downloaded files + download_status in JSON + manual.md
-Phase 3: (coming) parse downloaded files, extract knowledge via OpenAI
-Phase 4: (coming) generate agent skills
 ```
 
 ---
