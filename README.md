@@ -64,7 +64,7 @@ Fetch and rank papers from multiple academic sources. Results are saved to `resu
 scholar fetch "single-cell RNA sequencing" --top-n 20
 
 # Paper lookup
-scholar fetch 'find the paper "Attention Is All You Need"' --top-n 5
+scholar fetch 'find the paper "Attention Is All You Need"' 
 
 # With filters
 scholar fetch "attention mechanisms" --top-n 50 --domain-category cs_ml --year-from 2020
@@ -80,9 +80,6 @@ scholar fetch "diffusion models" --keyword-count 7
 
 # Save to a specific path
 scholar fetch "transformer architectures" --output results/transformers.json
-
-# Expand an existing result with new papers (deduplicates against prior run)
-scholar fetch "graph transformers" --expand
 
 # Integrated fetch + download in one step
 scholar fetch "graph transformers for molecular property prediction" --download
