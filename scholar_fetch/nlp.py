@@ -255,9 +255,9 @@ async def parse_natural_language_query(
     if not config.OPENAI_API_KEY:
         download_requested, download_top_n, cleaned_query = _fallback_download_request(text)
         print(
-            "[nexus] OPENAI_API_KEY not set — treating input as raw query string.\n"
-            "[nexus]   NLP parsing disabled. To enable natural language input:\n"
-            "[nexus]   add 'export OPENAI_API_KEY=sk-...' to ~/.bashrc, then run: source ~/.bashrc",
+            "[scholar] OPENAI_API_KEY not set — treating input as raw query string.\n"
+            "[scholar]   NLP parsing disabled. To enable natural language input:\n"
+            "[scholar]   add 'export OPENAI_API_KEY=sk-...' to ~/.bashrc, then run: source ~/.bashrc",
             file=sys.stderr,
         )
         return (

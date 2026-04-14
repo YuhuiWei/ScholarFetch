@@ -73,20 +73,20 @@ async def run(
     # Step 1: classify domain
     domain_categories = await classify_domain(query.query, domain_category_override)
     domain_label = ", ".join(domain_categories)
-    _err(f"[nexus] classifying domain... {domain_label}")
-    _err(f"[nexus] query intent... {query.query_intent}")
+    _err(f"[scholar] classifying domain... {domain_label}")
+    _err(f"[scholar] query intent... {query.query_intent}")
     if query.query_intent == "domain_search" and query.search_scope:
-        _err(f"[nexus] search scope... {query.search_scope}")
+        _err(f"[scholar] search scope... {query.search_scope}")
 
     # Step 2: parallel fetch — include OpenReview whenever cs_ml is one of the domains
     active_fetchers = [OpenAlexFetcher(), SemanticScholarFetcher()]
     if "cs_ml" in domain_categories:
         active_fetchers.append(OpenReviewFetcher())
     else:
-        _err(f"[nexus]   {'openreview':<20} –  skipped (domain: {domain_label})")
+        _err(f"[scholar]   {'openreview':<20} –  skipped (domain: {domain_label})")
 
     _err(
-        f"[nexus] fetching from {len(active_fetchers)} sources "
+        f"[scholar] fetching from {len(active_fetchers)} sources "
         f"(fetch_per_source={query.resolved_fetch_per_source()})"
     )
     results = await asyncio.gather(
@@ -101,18 +101,18 @@ async def run(
     for fetcher, result in zip(active_fetchers, results):
         if isinstance(result, Exception):
             sources_failed.append(fetcher.source_name)
-            _err(f"[nexus]   {fetcher.source_name:<20} ✗  failed ({result})")
+            _err(f"[scholar]   {fetcher.source_name:<20} ✗  failed ({result})")
         elif isinstance(result, list):
             count = len(result)
             if count:
                 sources_used.append(fetcher.source_name)
-            _err(f"[nexus]   {fetcher.source_name:<20} {'✓' if count else '–'}  {count} papers")
+            _err(f"[scholar]   {fetcher.source_name:<20} {'✓' if count else '–'}  {count} papers")
             all_papers.extend(result)
 
     # Step 3: dedup
-    _err(f"[nexus] deduplicating {len(all_papers)} papers...")
+    _err(f"[scholar] deduplicating {len(all_papers)} papers...")
     unique = deduplicate(all_papers, exclude_ids=query.exclude_ids or None)
-    _err(f"[nexus] deduplicating → {len(unique)} unique")
+    _err(f"[scholar] deduplicating → {len(unique)} unique")
 
     # Step 4: layered evaluation and score
     target_category = target_publication_category(query)
@@ -122,14 +122,14 @@ async def run(
     )
     if heuristic_filtered:
         _err(
-            f"[nexus] metadata heuristics filtered {heuristic_filtered} "
+            f"[scholar] metadata heuristics filtered {heuristic_filtered} "
             f"{'review/survey' if target_category == 'primary' else 'primary'} papers"
         )
     if not candidates:
         candidates = []
 
     suffix = " (relevance via OpenAI)" if cfg.OPENAI_API_KEY else " (relevance defaulting to 0.5)"
-    _err(f"[nexus] scoring {len(candidates)} papers{suffix}...")
+    _err(f"[scholar] scoring {len(candidates)} papers{suffix}...")
     scored = await score_all(candidates, query.query, domain_categories)
 
     llm_targets = select_llm_candidates(scored, uncertain, query.top_n) if cfg.OPENAI_API_KEY else []
@@ -141,11 +141,11 @@ async def run(
         )
         if llm_filtered:
             _err(
-                f"[nexus] llm evaluation filtered {llm_filtered} "
+                f"[scholar] llm evaluation filtered {llm_filtered} "
                 f"{'review/survey' if target_category == 'primary' else 'primary'} papers"
             )
         if llm_targets:
-            _err(f"[nexus] llm evaluated {len(llm_targets)} papers")
+            _err(f"[scholar] llm evaluated {len(llm_targets)} papers")
         scored = await score_all(llm_filtered_candidates, query.query, domain_categories)
 
     # Step 5: rank and truncate
@@ -154,7 +154,7 @@ async def run(
     if query.query_intent == "paper_lookup" or query.paper_titles:
         top_n, not_found, match_strategy = _rank_lookup_results(scored, query)
         if not_found and top_n:
-            _err("[nexus] exact paper match not found; returning closest matches")
+            _err("[scholar] exact paper match not found; returning closest matches")
         all_papers_ranked = top_n
     else:
         # Store all scored candidates; top_n_count marks the display cutoff.

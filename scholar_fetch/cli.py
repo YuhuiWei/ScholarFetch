@@ -38,14 +38,14 @@ def _print_summary(
     full_count = ranked_count if ranked_count is not None else len(result.papers)
     summary_path = output_path if output_path is not None else result.output_path
 
-    print(f"[nexus] ranked top {full_count}  →  {summary_path}", file=sys.stderr)
+    print(f"[scholar] ranked top {full_count}  →  {summary_path}", file=sys.stderr)
     if len(displayed_papers) != full_count:
         print(
-            f"[nexus] showing top {len(displayed_papers)} preview papers",
+            f"[scholar] showing top {len(displayed_papers)} preview papers",
             file=sys.stderr,
         )
     if getattr(result, "not_found", False):
-        print("[nexus] exact paper match not found — showing closest matches", file=sys.stderr)
+        print("[scholar] exact paper match not found — showing closest matches", file=sys.stderr)
     header = f"\n{'Rank':>4}  {'Score':>5}  {'Year':>4}  {'Venue':<22}  Title"
     print(header, file=sys.stderr)
     for i, paper in enumerate(displayed_papers, 1):
@@ -159,7 +159,7 @@ def fetch(
     try:
         asyncio.run(_run())
     except ValueError as exc:
-        print(f"[nexus] error: {exc}", file=sys.stderr)
+        print(f"[scholar] error: {exc}", file=sys.stderr)
         raise typer.Exit(code=1) from exc
 
 
@@ -182,7 +182,7 @@ def shell(
                 results_output_dir=output_dir,
             )
             if not workflow_result.result.papers:
-                print("[nexus] no papers returned", file=sys.stderr)
+                print("[scholar] no papers returned", file=sys.stderr)
                 return
             _r = workflow_result.result
             _print_summary(
@@ -217,7 +217,7 @@ def search(
         domain_slug=domain,
     )
     if not hits:
-        print("[nexus] no results found", file=sys.stderr)
+        print("[scholar] no results found", file=sys.stderr)
         return
     header = f"\n{'Rank':>4}  {'Score':>5}  {'DL':>4}  {'Year':>4}  {'Venue':<18}  Title"
     print(header)
@@ -233,4 +233,4 @@ def search(
         year = str(hit.paper.year or "—")
         score = f"{hit.paper.scores.composite:.3f}"
         print(f"{hit.rank:>4}  {score:>5}  {dl:>4}  {year:>4}  {venue:<18}  {title}")
-    print(f"\n[nexus] {len(hits)} results", file=sys.stderr)
+    print(f"\n[scholar] {len(hits)} results", file=sys.stderr)

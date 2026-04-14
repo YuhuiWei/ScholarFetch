@@ -77,7 +77,7 @@ async def _run_download_for_papers(
     ]
     skipped = len(already_downloaded)
     _err(
-        f"[nexus-dl] loading {source_label}  ->  "
+        f"[scholar-dl] loading {source_label}  ->  "
         f"{len(papers)} papers ({skipped} already downloaded)"
     )
 
@@ -89,12 +89,12 @@ async def _run_download_for_papers(
 
     if target_success_count is None:
         _err(
-            f"[nexus-dl] downloading up to {len(pending)} ranked papers "
+            f"[scholar-dl] downloading up to {len(pending)} ranked papers "
             f"(all downloadable content, max {_CONCURRENCY} concurrent)..."
         )
     else:
         _err(
-            f"[nexus-dl] downloading until {target_success_count} papers are available "
+            f"[scholar-dl] downloading until {target_success_count} papers are available "
             f"(max {_CONCURRENCY} concurrent)..."
         )
 
@@ -118,7 +118,7 @@ async def _run_download_for_papers(
                 if entry.file_path
                 else (entry.error or "")
             )
-            _err(f"[nexus-dl]   rank_{rank:02d}  {icon}  {source:<20} {size}  {name}")
+            _err(f"[scholar-dl]   rank_{rank:02d}  {icon}  {source:<20} {size}  {name}")
             return entry
 
         pending_index = 0
@@ -159,20 +159,20 @@ async def _run_download_for_papers(
 
     if target_success_count is None:
         _err(
-            f"[nexus-dl] done: {available_count} available, {downloaded_count} downloaded now, "
+            f"[scholar-dl] done: {available_count} available, {downloaded_count} downloaded now, "
             f"{len(failed_entries)} failed, {skipped} skipped  ->  {manifest_path}"
         )
     else:
         _err(
-            f"[nexus-dl] done: target {target_success_count}, available {available_count}, "
+            f"[scholar-dl] done: target {target_success_count}, available {available_count}, "
             f"{downloaded_count} downloaded now, {len(failed_entries)} failed, "
             f"{skipped} skipped, shortfall {shortfall_count}  ->  {manifest_path}"
         )
 
     if failed_entries:
-        _err("[nexus-dl] top manual-backup candidates:")
+        _err("[scholar-dl] top manual-backup candidates:")
         for entry in failed_entries[:5]:
-            _err(f"[nexus-dl]   rank_{entry.rank:02d}  {entry.title}")
+            _err(f"[scholar-dl]   rank_{entry.rank:02d}  {entry.title}")
     return manifest
 
 
@@ -236,7 +236,7 @@ async def _run_download_inplace(
 
     target_msg = f", targeting {top_n} successes" if top_n is not None else ""
     _err(
-        f"[nexus-dl] loading {source_label}  →  "
+        f"[scholar-dl] loading {source_label}  →  "
         f"{len(papers)} candidates{target_msg} ({skipped} already downloaded)"
     )
 
@@ -268,7 +268,7 @@ async def _run_download_inplace(
             source = entry.source_used or "-"
             size = f"({entry.file_size_kb:>4} KB)" if entry.file_size_kb else " " * 9
             name = Path(entry.file_path).name if entry.file_path else (entry.error or "")
-            _err(f"[nexus-dl]   rank_{rank:02d}  {icon}  {source:<20} {size}  {name}")
+            _err(f"[scholar-dl]   rank_{rank:02d}  {icon}  {source:<20} {size}  {name}")
             return entry
 
         remaining = top_n
@@ -300,6 +300,6 @@ async def _run_download_inplace(
     downloaded = sum(1 for p in run_result.papers if p.download_status == "success")
     failed = sum(1 for p in run_result.papers if p.download_status == "failed")
     _err(
-        f"[nexus-dl] done: {downloaded} downloaded, {failed} failed, "
+        f"[scholar-dl] done: {downloaded} downloaded, {failed} failed, "
         f"{skipped} skipped  →  {result_json_path}"
     )

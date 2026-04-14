@@ -28,7 +28,7 @@ def download_command(
         raise typer.BadParameter("top must be a positive integer")
 
     if not results_file.exists():
-        print(f"[nexus-dl] error: file not found: {results_file}", file=sys.stderr)
+        print(f"[scholar-dl] error: file not found: {results_file}", file=sys.stderr)
         raise typer.Exit(code=1)
 
     async def _run() -> None:
