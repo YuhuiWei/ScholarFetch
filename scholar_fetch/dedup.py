@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from rapidfuzz import fuzz
-from nexus_paper_fetcher.models import Paper, _derive_paper_id
+from scholar_fetch.models import Paper, _derive_paper_id
 
 FUZZY_THRESHOLD = 92
 

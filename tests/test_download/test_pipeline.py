@@ -5,15 +5,15 @@ import httpx
 import pytest
 import respx
 import typer
-from nexus_paper_fetcher.models import Paper, RunResult, ScoreBreakdown, SearchQuery
-from nexus_paper_fetcher.download.manifest import (
+from scholar_fetch.models import Paper, RunResult, ScoreBreakdown, SearchQuery
+from scholar_fetch.download.manifest import (
     DownloadSummary,
     Manifest,
     ManifestEntry,
     load_manifest,
     save_manifest,
 )
-from nexus_paper_fetcher.download.pipeline import run_download, run_download_for_result
+from scholar_fetch.download.pipeline import run_download, run_download_for_result
 from tests.test_download.constants import FAKE_PDF
 
 
@@ -685,7 +685,7 @@ async def test_run_download_falls_back_to_elsevier_xml_after_oa_failures(
 def test_cli_download_command(tmp_path):
     """nexus download results.json writes manifest/output for a valid input."""
     from typer.testing import CliRunner
-    from nexus_paper_fetcher.cli import app
+    from scholar_fetch.cli import app
 
     _mock_default_three_paper_routes()
 
@@ -708,7 +708,7 @@ def test_cli_download_command(tmp_path):
 
 def test_cli_skip_ezproxy_option_rejected(tmp_path):
     from typer.testing import CliRunner
-    from nexus_paper_fetcher.cli import app
+    from scholar_fetch.cli import app
 
     runner = CliRunner()
     result = runner.invoke(
@@ -721,7 +721,7 @@ def test_cli_skip_ezproxy_option_rejected(tmp_path):
 
 def test_cli_output_dir_help_mentions_downloaded_files():
     from typer.testing import CliRunner
-    from nexus_paper_fetcher.cli import app
+    from scholar_fetch.cli import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["download", "--help"])
@@ -765,7 +765,7 @@ async def test_download_updates_paper_status_in_result_json(tmp_path, monkeypatc
             file_path=pdf_path, file_size_kb=1,
         )
 
-    import nexus_paper_fetcher.download.pipeline as dl_pipe
+    import scholar_fetch.download.pipeline as dl_pipe
     monkeypatch.setattr(dl_pipe, "resolve", fake_resolve)
 
     await run_download_for_result(result, output_dir, result_json_path=result_path)
@@ -789,7 +789,7 @@ async def test_download_creates_manual_md_for_failed(tmp_path, monkeypatch):
             score=0.8, status="failed", error="no source",
         )
 
-    import nexus_paper_fetcher.download.pipeline as dl_pipe
+    import scholar_fetch.download.pipeline as dl_pipe
     monkeypatch.setattr(dl_pipe, "resolve", fake_resolve)
 
     await run_download_for_result(result, output_dir, result_json_path=result_path)
@@ -813,7 +813,7 @@ async def test_download_does_not_write_manifest_json(tmp_path, monkeypatch):
             score=0.8, status="failed", error="no source",
         )
 
-    import nexus_paper_fetcher.download.pipeline as dl_pipe
+    import scholar_fetch.download.pipeline as dl_pipe
     monkeypatch.setattr(dl_pipe, "resolve", fake_resolve)
 
     await run_download_for_result(result, output_dir, result_json_path=result_path)

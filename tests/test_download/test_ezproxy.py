@@ -2,7 +2,7 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-from nexus_paper_fetcher.download.ezproxy import EZProxySession, EZPROXY_LOGIN_URL
+from scholar_fetch.download.ezproxy import EZProxySession, EZPROXY_LOGIN_URL
 from tests.test_download.constants import FAKE_PDF, FAKE_HTML
 
 pytestmark = pytest.mark.skip(reason="EZproxy no longer participates in active download resolution.")

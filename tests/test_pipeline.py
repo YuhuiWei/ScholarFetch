@@ -1,13 +1,13 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from nexus_paper_fetcher.models import SearchQuery
-from nexus_paper_fetcher.pipeline import run
+from scholar_fetch.models import SearchQuery
+from scholar_fetch.pipeline import run
 
 
 async def test_pipeline_returns_top_n_sorted(sample_papers, monkeypatch):
-    import nexus_paper_fetcher.pipeline as pipe
-    import nexus_paper_fetcher.evaluation as evaluation
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.pipeline as pipe
+    import scholar_fetch.evaluation as evaluation
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(pipe, "cfg", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(evaluation, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
@@ -26,9 +26,9 @@ async def test_pipeline_returns_top_n_sorted(sample_papers, monkeypatch):
 
 
 async def test_pipeline_partial_source_failure(sample_papers, monkeypatch):
-    import nexus_paper_fetcher.pipeline as pipe
-    import nexus_paper_fetcher.evaluation as evaluation
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.pipeline as pipe
+    import scholar_fetch.evaluation as evaluation
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(pipe, "cfg", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(evaluation, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
@@ -43,9 +43,9 @@ async def test_pipeline_partial_source_failure(sample_papers, monkeypatch):
 
 
 async def test_pipeline_openreview_not_called_for_biology(sample_papers, monkeypatch):
-    import nexus_paper_fetcher.pipeline as pipe
-    import nexus_paper_fetcher.evaluation as evaluation
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.pipeline as pipe
+    import scholar_fetch.evaluation as evaluation
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(pipe, "cfg", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(evaluation, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
@@ -62,9 +62,9 @@ async def test_pipeline_openreview_not_called_for_biology(sample_papers, monkeyp
 
 
 async def test_pipeline_openreview_called_for_cs_ml(sample_papers, monkeypatch):
-    import nexus_paper_fetcher.pipeline as pipe
-    import nexus_paper_fetcher.evaluation as evaluation
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.pipeline as pipe
+    import scholar_fetch.evaluation as evaluation
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(pipe, "cfg", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(evaluation, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
@@ -81,9 +81,9 @@ async def test_pipeline_openreview_called_for_cs_ml(sample_papers, monkeypatch):
 
 
 async def test_pipeline_result_has_run_metadata(sample_papers, monkeypatch):
-    import nexus_paper_fetcher.pipeline as pipe
-    import nexus_paper_fetcher.evaluation as evaluation
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.pipeline as pipe
+    import scholar_fetch.evaluation as evaluation
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(pipe, "cfg", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(evaluation, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
@@ -101,10 +101,10 @@ async def test_pipeline_result_has_run_metadata(sample_papers, monkeypatch):
 
 
 async def test_pipeline_marks_lookup_not_found_when_exact_title_missing(monkeypatch):
-    import nexus_paper_fetcher.pipeline as pipe
-    import nexus_paper_fetcher.evaluation as evaluation
-    import nexus_paper_fetcher.scoring.relevance as rel
-    from nexus_paper_fetcher.models import Paper
+    import scholar_fetch.pipeline as pipe
+    import scholar_fetch.evaluation as evaluation
+    import scholar_fetch.scoring.relevance as rel
+    from scholar_fetch.models import Paper
 
     monkeypatch.setattr(pipe, "cfg", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(evaluation, "config", type("c", (), {"OPENAI_API_KEY": ""})())
@@ -140,10 +140,10 @@ async def test_pipeline_marks_lookup_not_found_when_exact_title_missing(monkeypa
 
 
 async def test_pipeline_filters_review_like_results_by_default(monkeypatch):
-    import nexus_paper_fetcher.pipeline as pipe
-    import nexus_paper_fetcher.evaluation as evaluation
-    import nexus_paper_fetcher.scoring.relevance as rel
-    from nexus_paper_fetcher.models import Paper
+    import scholar_fetch.pipeline as pipe
+    import scholar_fetch.evaluation as evaluation
+    import scholar_fetch.scoring.relevance as rel
+    from scholar_fetch.models import Paper
 
     monkeypatch.setattr(pipe, "cfg", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(evaluation, "config", type("c", (), {"OPENAI_API_KEY": ""})())

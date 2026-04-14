@@ -5,7 +5,7 @@ from typing import Optional
 
 from openai import AsyncOpenAI
 
-from nexus_paper_fetcher import config
+from scholar_fetch import config
 
 logger = logging.getLogger(__name__)
 

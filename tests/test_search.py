@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 from datetime import datetime, timezone
-from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
-from nexus_paper_fetcher.search import search_results, SearchHit
+from scholar_fetch.models import Paper, RunResult, SearchQuery
+from scholar_fetch.search import search_results, SearchHit
 
 
 def _write_result(tmp_path: Path, papers: list[Paper], slug: str) -> Path:

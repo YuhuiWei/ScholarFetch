@@ -1,11 +1,11 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from nexus_paper_fetcher.nlp import parse_natural_language_query
+from scholar_fetch.nlp import parse_natural_language_query
 
 
 async def test_parse_natural_language_query_reads_keyword_count(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": "fake"})())
 
@@ -35,7 +35,7 @@ async def test_parse_natural_language_query_reads_keyword_count(monkeypatch):
 
 
 async def test_parse_natural_language_query_keeps_zero_keyword_count(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": "fake"})())
 
@@ -58,7 +58,7 @@ async def test_parse_natural_language_query_keeps_zero_keyword_count(monkeypatch
 
 
 async def test_parse_natural_language_query_reads_lookup_weight_and_venue_fields(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": "fake"})())
 
@@ -85,7 +85,7 @@ async def test_parse_natural_language_query_reads_lookup_weight_and_venue_fields
 
 
 async def test_parse_natural_language_query_reads_publication_categories_and_logic(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": "fake"})())
 
@@ -110,7 +110,7 @@ async def test_parse_natural_language_query_reads_publication_categories_and_log
 
 
 async def test_parse_natural_language_query_fallback_detects_exact_venue_and_auto_logic(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
 
@@ -124,7 +124,7 @@ async def test_parse_natural_language_query_fallback_detects_exact_venue_and_aut
 
 
 async def test_parse_natural_language_query_fallback_detects_lookup_intent(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
 
@@ -138,7 +138,7 @@ async def test_parse_natural_language_query_fallback_detects_lookup_intent(monke
 
 
 async def test_parse_natural_language_query_fallback_reads_requested_result_count(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
 
@@ -150,7 +150,7 @@ async def test_parse_natural_language_query_fallback_reads_requested_result_coun
 
 
 async def test_parse_natural_language_query_fallback_detects_domain_download_intent(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
 
@@ -167,7 +167,7 @@ async def test_parse_natural_language_query_fallback_detects_domain_download_int
 
 
 async def test_parse_natural_language_query_fallback_detects_lookup_download_intent(monkeypatch):
-    import nexus_paper_fetcher.nlp as nlp
+    import scholar_fetch.nlp as nlp
 
     monkeypatch.setattr(nlp, "config", type("c", (), {"OPENAI_API_KEY": ""})())
 

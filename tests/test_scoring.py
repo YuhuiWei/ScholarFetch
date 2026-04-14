@@ -1,5 +1,5 @@
 import pytest
-from nexus_paper_fetcher.scoring.venue import VenueScorer
+from scholar_fetch.scoring.venue import VenueScorer
 
 
 def test_venue_exact_match_tier1():
@@ -33,8 +33,8 @@ def test_venue_none_returns_default():
     assert VenueScorer.score(None) == 0.3
 
 
-from nexus_paper_fetcher.scoring.citation import CitationScorer
-from nexus_paper_fetcher.scoring.recency import RecencyScorer
+from scholar_fetch.scoring.citation import CitationScorer
+from scholar_fetch.scoring.recency import RecencyScorer
 import math
 
 
@@ -88,25 +88,25 @@ def test_recency_missing_year_returns_default():
 
 
 from unittest.mock import AsyncMock, MagicMock, patch
-from nexus_paper_fetcher.scoring.relevance import RelevanceScorer, DEFAULT_SCORE
+from scholar_fetch.scoring.relevance import RelevanceScorer, DEFAULT_SCORE
 
 
 async def test_relevance_no_api_key_returns_default(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     scores = await RelevanceScorer.score_batch("query", ["abstract one", "abstract two"])
     assert scores == [DEFAULT_SCORE, DEFAULT_SCORE]
 
 
 async def test_relevance_empty_abstract_returns_default(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     scores = await RelevanceScorer.score_batch("query", [""])
     assert scores == [DEFAULT_SCORE]
 
 
 async def test_relevance_with_api_key_returns_cosine_scores(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": "fake-key"})())
 
     # query vec = [1,0,0,0], identical vec = [1,0,0,0] (cosine 1.0),
@@ -128,7 +128,7 @@ async def test_relevance_with_api_key_returns_cosine_scores(monkeypatch):
 
 
 async def test_relevance_scores_between_zero_and_one(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": "fake-key"})())
 
     import numpy as np
@@ -151,7 +151,7 @@ async def test_relevance_scores_between_zero_and_one(monkeypatch):
 
 
 async def test_relevance_batches_large_requests(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
 
     monkeypatch.setattr(
         rel,
@@ -183,12 +183,12 @@ async def test_relevance_batches_large_requests(monkeypatch):
 
 
 from unittest.mock import AsyncMock, patch
-from nexus_paper_fetcher.models import Paper
-from nexus_paper_fetcher.scoring.scorer import score_all, DOMAIN_WEIGHTS
+from scholar_fetch.models import Paper
+from scholar_fetch.scoring.scorer import score_all, DOMAIN_WEIGHTS
 
 
 async def test_composite_score_in_range(sample_papers, monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     result = await score_all(sample_papers, "gene expression", ["biology"])
     for p in result:
@@ -196,7 +196,7 @@ async def test_composite_score_in_range(sample_papers, monkeypatch):
 
 
 async def test_composite_uses_domain_weights(sample_papers, monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     # cs_ml weights recency heavily; biology weights citation heavily
     await score_all(sample_papers[:1], "test", ["cs_ml"])
@@ -206,7 +206,7 @@ async def test_composite_uses_domain_weights(sample_papers, monkeypatch):
 
 
 async def test_composite_oral_bonus_applied(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     oral = Paper.create(title="Oral Paper", year=2023, venue="NeurIPS",
                         openreview_tier="oral", citation_count=100, sources=["openreview"])
@@ -221,7 +221,7 @@ async def test_composite_oral_bonus_applied(monkeypatch):
 
 
 async def test_composite_capped_at_one(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
+    import scholar_fetch.scoring.relevance as rel
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     # High citation + oral bonus: shouldn't exceed 1.0
     paper = Paper.create(title="T", year=2024, venue="NeurIPS",
@@ -232,8 +232,8 @@ async def test_composite_capped_at_one(monkeypatch):
 
 
 async def test_composite_uses_llm_relevance_score_when_present(monkeypatch):
-    import nexus_paper_fetcher.scoring.relevance as rel
-    import nexus_paper_fetcher.scoring.scorer as scorer
+    import scholar_fetch.scoring.relevance as rel
+    import scholar_fetch.scoring.scorer as scorer
 
     monkeypatch.setattr(rel, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     monkeypatch.setattr(

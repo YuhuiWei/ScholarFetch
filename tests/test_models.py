@@ -1,5 +1,5 @@
 import pytest
-from nexus_paper_fetcher.models import Paper, SearchQuery, ScoreBreakdown, RunResult, _derive_paper_id
+from scholar_fetch.models import Paper, SearchQuery, ScoreBreakdown, RunResult, _derive_paper_id
 
 
 def test_paper_id_uses_doi_first():

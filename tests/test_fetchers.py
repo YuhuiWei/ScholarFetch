@@ -1,8 +1,8 @@
 import pytest
 import respx
 import httpx
-from nexus_paper_fetcher.fetchers.base import BaseFetcher
-from nexus_paper_fetcher.models import Paper, SearchQuery
+from scholar_fetch.fetchers.base import BaseFetcher
+from scholar_fetch.models import Paper, SearchQuery
 
 
 class _ConcreteFetcher(BaseFetcher):
@@ -50,7 +50,7 @@ async def test_base_fetcher_retries_on_timeout():
     assert route.call_count == 3
 
 
-from nexus_paper_fetcher.fetchers.openalex import OpenAlexFetcher, _reconstruct_abstract
+from scholar_fetch.fetchers.openalex import OpenAlexFetcher, _reconstruct_abstract
 
 OPENALEX_RESPONSE = {
     "meta": {"count": 2, "next_cursor": None},
@@ -125,7 +125,7 @@ async def test_openalex_fetcher_handles_missing_fields():
     assert p2.authors == []
 
 
-from nexus_paper_fetcher.fetchers.semantic_scholar import SemanticScholarFetcher
+from scholar_fetch.fetchers.semantic_scholar import SemanticScholarFetcher
 
 S2_RESPONSE = {
     "total": 1,
@@ -182,7 +182,7 @@ async def test_s2_fetcher_falls_back_to_citation_count():
     assert papers[0].citation_count == 80
 
 
-from nexus_paper_fetcher.fetchers.openreview import OpenReviewFetcher
+from scholar_fetch.fetchers.openreview import OpenReviewFetcher
 
 OR_SUBMISSIONS = {
     "notes": [
@@ -300,7 +300,7 @@ async def test_openreview_fetcher_uses_query_search_route():
 
 
 async def test_openreview_fetcher_defaults_year_to_current_year(monkeypatch):
-    import nexus_paper_fetcher.fetchers.openreview as openreview
+    import scholar_fetch.fetchers.openreview as openreview
 
     years_seen = []
 
@@ -324,7 +324,7 @@ async def test_openreview_fetcher_defaults_year_to_current_year(monkeypatch):
 
 
 async def test_openreview_fetcher_uses_authenticated_v2_search_in_pages(monkeypatch):
-    import nexus_paper_fetcher.fetchers.openreview as openreview
+    import scholar_fetch.fetchers.openreview as openreview
 
     class FakeNote:
         def __init__(self, title: str, year: int):

@@ -5,11 +5,11 @@ import sys
 from pathlib import Path
 from typing import Optional
 import typer
-from nexus_paper_fetcher.download.pipeline import run_download
+from scholar_fetch.download.pipeline import run_download
 
 _DEFAULT_OUTPUT_DIR = Path(
-    os.environ.get("NEXUS_DOWNLOAD_DIR")
-    or os.environ.get("NEXUS_PDF_DIR", "papers")
+    os.environ.get("SCHOLAR_DOWNLOAD_DIR")
+    or os.environ.get("SCHOLAR_PDF_DIR", "papers")
 )
 
 

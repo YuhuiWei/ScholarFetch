@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from nexus_paper_fetcher.models import Paper
+from scholar_fetch.models import Paper
 
 _MANUAL_FILENAME = "manual.md"
 _PAPER_ID_PATTERN = re.compile(r"\*\*paper_id:\*\*\s+([a-f0-9]+)")
@@ -10,7 +10,7 @@ _PAPER_ID_PATTERN = re.compile(r"\*\*paper_id:\*\*\s+([a-f0-9]+)")
 _HEADER = """\
 # Manual Download Queue
 
-Papers below could not be auto-downloaded by nexus-paper-fetcher.
+Papers below could not be auto-downloaded by ScholarFetch.
 To download manually:
 1. Use the DOI link to access via your institution
 2. Drop the PDF into the ScholarWiki manual_inbox/ directory

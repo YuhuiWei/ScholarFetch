@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, Mock
 
 from typer.testing import CliRunner
 
-from nexus_paper_fetcher import cli
-from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
+from scholar_fetch import cli
+from scholar_fetch.models import Paper, RunResult, SearchQuery
 
 
 def _workflow_result(tmp_path):
@@ -477,8 +477,8 @@ def test_fetch_expand_flag_passes_expand_existing(tmp_path, monkeypatch):
 
 def test_search_command_prints_results(tmp_path, monkeypatch):
     """nexus search <query> invokes search_results and prints hits."""
-    from nexus_paper_fetcher.models import Paper
-    from nexus_paper_fetcher.search import SearchHit
+    from scholar_fetch.models import Paper
+    from scholar_fetch.search import SearchHit
 
     fake_paper = Paper.create(title="Test Hit Paper", year=2024, sources=["openalex"])
     fake_paper.scores.composite = 0.85

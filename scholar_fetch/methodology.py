@@ -6,8 +6,8 @@ from typing import Iterable
 
 from openai import AsyncOpenAI
 
-from nexus_paper_fetcher import config
-from nexus_paper_fetcher.models import Paper
+from scholar_fetch import config
+from scholar_fetch.models import Paper
 
 logger = logging.getLogger(__name__)
 

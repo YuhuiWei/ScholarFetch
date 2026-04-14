@@ -8,12 +8,12 @@ from typing import Optional, Protocol
 
 import typer
 
-from nexus_paper_fetcher.download.manifest import DownloadSummary, Manifest
-from nexus_paper_fetcher.download.pipeline import run_download_for_result
-from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
-from nexus_paper_fetcher.nlp import parse_natural_language_query, prepare_query
-from nexus_paper_fetcher.pipeline import run
-from nexus_paper_fetcher.slugs import make_query_slug
+from scholar_fetch.download.manifest import DownloadSummary, Manifest
+from scholar_fetch.download.pipeline import run_download_for_result
+from scholar_fetch.models import Paper, RunResult, SearchQuery
+from scholar_fetch.nlp import parse_natural_language_query, prepare_query
+from scholar_fetch.pipeline import run
+from scholar_fetch.slugs import make_query_slug
 
 
 class PromptIO(Protocol):

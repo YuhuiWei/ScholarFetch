@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from nexus_paper_fetcher.download.manifest import (
+from scholar_fetch.download.manifest import (
     Manifest, ManifestEntry, load_manifest, save_manifest,
 )
 

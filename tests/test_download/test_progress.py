@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from nexus_paper_fetcher.download.progress import (
+from scholar_fetch.download.progress import (
     DownloadProgress, load_progress, save_progress,
 )
 

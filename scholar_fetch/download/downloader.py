@@ -6,16 +6,16 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 import httpx
-from nexus_paper_fetcher.models import Paper
-from nexus_paper_fetcher.download.manifest import ManifestEntry, SourceUsed
-from nexus_paper_fetcher.fetchers.openalex import extract_open_access_pdf_url
+from scholar_fetch.models import Paper
+from scholar_fetch.download.manifest import ManifestEntry, SourceUsed
+from scholar_fetch.fetchers.openalex import extract_open_access_pdf_url
 
 logger = logging.getLogger(__name__)
 OPENALEX_WORKS_URL = "https://api.openalex.org/works"
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 UNPAYWALL_API_URL = "https://api.unpaywall.org/v2"
-DEFAULT_UNPAYWALL_EMAIL = "weiy@ohsu"
-UNPAYWALL_EMAIL_ENV_VAR = "NEXUS_UNPAYWALL_EMAIL"
+DEFAULT_UNPAYWALL_EMAIL = ""
+UNPAYWALL_EMAIL_ENV_VAR = "SCHOLAR_UNPAYWALL_EMAIL"
 ELSEVIER_API_KEY_ENV_VAR = "ELSEVIER_API_KEY"
 ELSEVIER_ARTICLE_DOI_URL = "https://api.elsevier.com/content/article/doi"
 DOWNLOAD_HEADERS = {

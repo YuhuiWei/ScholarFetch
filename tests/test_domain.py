@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from nexus_paper_fetcher.domain import classify_domain, _keyword_classify
+from scholar_fetch.domain import classify_domain, _keyword_classify
 
 
 def test_keyword_classify_biology():
@@ -49,20 +49,20 @@ async def test_classify_invalid_override_raises():
 
 
 async def test_classify_no_api_key_uses_keywords(monkeypatch):
-    import nexus_paper_fetcher.domain as dom
+    import scholar_fetch.domain as dom
     monkeypatch.setattr(dom, "config", type("c", (), {"OPENAI_API_KEY": ""})())
     result = await classify_domain("protein folding")
     assert "biology" in result
 
 
 async def test_classify_with_api_key_uses_openai(monkeypatch):
-    import nexus_paper_fetcher.domain as dom
+    import scholar_fetch.domain as dom
     monkeypatch.setattr(dom, "config", type("c", (), {"OPENAI_API_KEY": "fake"})())
 
     mock_response = MagicMock()
     mock_response.choices[0].message.content = "cs_ml,biology"
 
-    with patch("nexus_paper_fetcher.domain.AsyncOpenAI") as mock_cls:
+    with patch("scholar_fetch.domain.AsyncOpenAI") as mock_cls:
         mock_client = MagicMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
         mock_cls.return_value = mock_client
@@ -72,13 +72,13 @@ async def test_classify_with_api_key_uses_openai(monkeypatch):
 
 
 async def test_classify_openai_single_domain(monkeypatch):
-    import nexus_paper_fetcher.domain as dom
+    import scholar_fetch.domain as dom
     monkeypatch.setattr(dom, "config", type("c", (), {"OPENAI_API_KEY": "fake"})())
 
     mock_response = MagicMock()
     mock_response.choices[0].message.content = "biology"
 
-    with patch("nexus_paper_fetcher.domain.AsyncOpenAI") as mock_cls:
+    with patch("scholar_fetch.domain.AsyncOpenAI") as mock_cls:
         mock_client = MagicMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
         mock_cls.return_value = mock_client
@@ -87,10 +87,10 @@ async def test_classify_openai_single_domain(monkeypatch):
 
 
 async def test_classify_openai_failure_falls_back_to_keywords(monkeypatch):
-    import nexus_paper_fetcher.domain as dom
+    import scholar_fetch.domain as dom
     monkeypatch.setattr(dom, "config", type("c", (), {"OPENAI_API_KEY": "fake"})())
 
-    with patch("nexus_paper_fetcher.domain.AsyncOpenAI") as mock_cls:
+    with patch("scholar_fetch.domain.AsyncOpenAI") as mock_cls:
         mock_client = MagicMock()
         mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API down"))
         mock_cls.return_value = mock_client

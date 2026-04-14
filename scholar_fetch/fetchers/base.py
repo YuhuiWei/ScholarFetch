@@ -11,7 +11,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from nexus_paper_fetcher.models import Paper, SearchQuery
+from scholar_fetch.models import Paper, SearchQuery
 
 logger = logging.getLogger(__name__)
 

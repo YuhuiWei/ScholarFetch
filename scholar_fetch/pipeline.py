@@ -8,21 +8,21 @@ from typing import Optional
 
 from rapidfuzz import fuzz
 
-import nexus_paper_fetcher.config as cfg
-from nexus_paper_fetcher.evaluation import (
+import scholar_fetch.config as cfg
+from scholar_fetch.evaluation import (
     LlmCategoricalJudge,
     apply_metadata_heuristics,
     filter_by_target_category,
     select_llm_candidates,
     target_publication_category,
 )
-from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
-from nexus_paper_fetcher.fetchers.openalex import OpenAlexFetcher
-from nexus_paper_fetcher.fetchers.semantic_scholar import SemanticScholarFetcher
-from nexus_paper_fetcher.fetchers.openreview import OpenReviewFetcher
-from nexus_paper_fetcher.dedup import deduplicate
-from nexus_paper_fetcher.domain import classify_domain
-from nexus_paper_fetcher.scoring.scorer import score_all
+from scholar_fetch.models import Paper, RunResult, SearchQuery
+from scholar_fetch.fetchers.openalex import OpenAlexFetcher
+from scholar_fetch.fetchers.semantic_scholar import SemanticScholarFetcher
+from scholar_fetch.fetchers.openreview import OpenReviewFetcher
+from scholar_fetch.dedup import deduplicate
+from scholar_fetch.domain import classify_domain
+from scholar_fetch.scoring.scorer import score_all
 
 logger = logging.getLogger(__name__)
 

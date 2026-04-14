@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
-from nexus_paper_fetcher.download.manual import update_manual_md
-from nexus_paper_fetcher.models import Paper
+from scholar_fetch.download.manual import update_manual_md
+from scholar_fetch.models import Paper
 
 
 def _make_paper(title, doi=None, rank=1, score=0.80, year=2024,

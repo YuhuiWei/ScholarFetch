@@ -5,8 +5,8 @@ import re
 import sys
 from typing import Optional
 
-from nexus_paper_fetcher import config
-from nexus_paper_fetcher.models import SearchQuery
+from scholar_fetch import config
+from scholar_fetch.models import SearchQuery
 
 logger = logging.getLogger(__name__)
 

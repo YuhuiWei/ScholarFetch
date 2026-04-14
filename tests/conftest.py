@@ -1,6 +1,6 @@
 import pytest
-import nexus_paper_fetcher.config as _config
-from nexus_paper_fetcher.models import Paper
+import scholar_fetch.config as _config
+from scholar_fetch.models import Paper
 
 
 @pytest.fixture(autouse=True)

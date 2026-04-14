@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Optional
 import httpx
 import typer
-from nexus_paper_fetcher.models import RunResult
-from nexus_paper_fetcher.download.manifest import DownloadSummary, Manifest, load_manifest, save_manifest
-from nexus_paper_fetcher.download.downloader import resolve, ManifestEntry
-from nexus_paper_fetcher.download.progress import DownloadProgress, load_progress, save_progress
-from nexus_paper_fetcher.download.manual import update_manual_md
+from scholar_fetch.models import RunResult
+from scholar_fetch.download.manifest import DownloadSummary, Manifest, load_manifest, save_manifest
+from scholar_fetch.download.downloader import resolve, ManifestEntry
+from scholar_fetch.download.progress import DownloadProgress, load_progress, save_progress
+from scholar_fetch.download.manual import update_manual_md
 
 logger = logging.getLogger(__name__)
 _CONCURRENCY = 3

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 import typer
 
-from nexus_paper_fetcher.download.manifest import DownloadSummary, Manifest, ManifestEntry
-from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
+from scholar_fetch.download.manifest import DownloadSummary, Manifest, ManifestEntry
+from scholar_fetch.models import Paper, RunResult, SearchQuery
 
 
 def _make_result(
@@ -44,7 +44,7 @@ def _load_saved_result(path: Path) -> RunResult:
 
 @pytest.fixture
 def workflow_module():
-    return importlib.import_module("nexus_paper_fetcher.workflow")
+    return importlib.import_module("scholar_fetch.workflow")
 
 
 async def test_interactive_saves_full_results_and_stops_when_download_declined(
@@ -882,7 +882,7 @@ async def test_expands_explicit_output_path_before_writing(
 async def test_expand_existing_excludes_prior_papers(tmp_path, monkeypatch):
     """When expand_existing=True, previously found paper_ids are excluded from dedup."""
     import json
-    from nexus_paper_fetcher.models import Paper, RunResult, SearchQuery
+    from scholar_fetch.models import Paper, RunResult, SearchQuery
     from datetime import datetime, timezone
 
     monkeypatch.chdir(tmp_path)
@@ -901,7 +901,7 @@ async def test_expand_existing_excludes_prior_papers(tmp_path, monkeypatch):
     result_file = slug_dir / "2026-04-01_top20.json"
     result_file.write_text(json.dumps(existing_result.model_dump(mode="json"), default=str))
 
-    import nexus_paper_fetcher.workflow as wf
+    import scholar_fetch.workflow as wf
 
     new_paper = Paper.create(
         title="New Paper", doi="10.1/new", year=2025, sources=["openalex"]
@@ -921,7 +921,7 @@ async def test_expand_existing_excludes_prior_papers(tmp_path, monkeypatch):
     monkeypatch.setattr(wf, "prepare_query", prepare_mock)
     monkeypatch.setattr(wf, "run_download_for_result", download_mock)
 
-    from nexus_paper_fetcher.workflow import run_fetch_workflow
+    from scholar_fetch.workflow import run_fetch_workflow
     result = await run_fetch_workflow(
         query="attention mechanisms",
         top_n=20,
@@ -940,7 +940,7 @@ async def test_expand_existing_excludes_prior_papers(tmp_path, monkeypatch):
 
 def test_make_result_path_uses_slug(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    from nexus_paper_fetcher.workflow import _make_result_path
+    from scholar_fetch.workflow import _make_result_path
     p = _make_result_path("single-cell RNA sequencing", 20)
     assert "single-cell-rna-sequencing" in str(p)
     assert p.suffix == ".json"
@@ -949,13 +949,13 @@ def test_make_result_path_uses_slug(tmp_path, monkeypatch):
 
 def test_find_existing_results_none_when_dir_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    from nexus_paper_fetcher.workflow import _find_existing_results
+    from scholar_fetch.workflow import _find_existing_results
     assert _find_existing_results("attention mechanisms") is None
 
 
 def test_find_existing_results_returns_sorted_files(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    from nexus_paper_fetcher.workflow import _find_existing_results
+    from scholar_fetch.workflow import _find_existing_results
     slug_dir = tmp_path / "results" / "attention-mechanisms"
     slug_dir.mkdir(parents=True)
     old = slug_dir / "2026-04-01_top20.json"

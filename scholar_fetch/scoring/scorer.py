@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from nexus_paper_fetcher.models import Paper, ScoreBreakdown
-from nexus_paper_fetcher.scoring.citation import CitationScorer
-from nexus_paper_fetcher.scoring.recency import RecencyScorer
-from nexus_paper_fetcher.scoring.relevance import RelevanceScorer
-from nexus_paper_fetcher.scoring.venue import VenueScorer
+from scholar_fetch.models import Paper, ScoreBreakdown
+from scholar_fetch.scoring.citation import CitationScorer
+from scholar_fetch.scoring.recency import RecencyScorer
+from scholar_fetch.scoring.relevance import RelevanceScorer
+from scholar_fetch.scoring.venue import VenueScorer
 
 DOMAIN_WEIGHTS: dict[str, dict[str, float]] = {
     "cs_ml":     {"venue": 0.20, "citation": 0.15, "recency": 0.30, "relevance": 0.35},

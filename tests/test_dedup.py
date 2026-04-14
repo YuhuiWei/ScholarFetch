@@ -1,6 +1,6 @@
 import pytest
-from nexus_paper_fetcher.models import Paper
-from nexus_paper_fetcher.dedup import deduplicate, _normalize_doi, _normalize_title
+from scholar_fetch.models import Paper
+from scholar_fetch.dedup import deduplicate, _normalize_doi, _normalize_title
 
 
 def test_normalize_doi_strips_prefix():
@@ -77,7 +77,7 @@ def test_paper_id_rederived_after_merge():
     p1 = Paper.create(title="My Paper", year=2023, sources=["openreview"])
     p2 = Paper.create(title="My Paper", year=2023, doi="10.1/myp", sources=["s2"])
     result = deduplicate([p1, p2])
-    from nexus_paper_fetcher.models import _derive_paper_id
+    from scholar_fetch.models import _derive_paper_id
     expected_id = _derive_paper_id("10.1/myp", None, "My Paper", 2023)
     assert result[0].paper_id == expected_id
 

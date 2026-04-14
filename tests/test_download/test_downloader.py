@@ -6,8 +6,8 @@ from urllib.parse import quote
 
 import httpx
 import respx
-from nexus_paper_fetcher.models import Paper, ScoreBreakdown
-from nexus_paper_fetcher.download.downloader import resolve, _sanitize_title
+from scholar_fetch.models import Paper, ScoreBreakdown
+from scholar_fetch.download.downloader import resolve, _sanitize_title
 from tests.test_download.constants import FAKE_PDF, FAKE_HTML
 
 ELSEVIER_FULL_TEXT_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -248,7 +248,7 @@ async def test_doi_resolves_through_unpaywall_pdf(tmp_path):
 
 @respx.mock
 async def test_doi_unpaywall_uses_env_configured_email(tmp_path, monkeypatch):
-    monkeypatch.setenv("NEXUS_UNPAYWALL_EMAIL", "custom@example.edu")
+    monkeypatch.setenv("SCHOLAR_UNPAYWALL_EMAIL", "custom@example.edu")
     respx.get("https://export.arxiv.org/api/query").mock(
         return_value=httpx.Response(
             200,

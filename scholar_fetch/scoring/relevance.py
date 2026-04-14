@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from nexus_paper_fetcher import config
+from scholar_fetch import config
 
 logger = logging.getLogger(__name__)
 

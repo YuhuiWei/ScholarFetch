@@ -1,4 +1,4 @@
-from nexus_paper_fetcher.slugs import make_query_slug
+from scholar_fetch.slugs import make_query_slug
 
 
 def test_slug_lowercases():

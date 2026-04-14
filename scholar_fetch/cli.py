@@ -6,9 +6,9 @@ from typing import Optional
 
 import typer
 
-from nexus_paper_fetcher.download.cli import download_command
-from nexus_paper_fetcher.search import search_results
-from nexus_paper_fetcher.workflow import run_fetch_workflow
+from scholar_fetch.download.cli import download_command
+from scholar_fetch.search import search_results
+from scholar_fetch.workflow import run_fetch_workflow
 
 app = typer.Typer(help="Nexus Paper Fetcher — ranked academic paper search")
 app.command("download")(download_command)

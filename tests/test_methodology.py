@@ -1,12 +1,12 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from nexus_paper_fetcher.methodology import classify_methodology
-from nexus_paper_fetcher.models import Paper
+from scholar_fetch.methodology import classify_methodology
+from scholar_fetch.models import Paper
 
 
 async def test_classify_methodology_uses_compact_codes(monkeypatch):
-    import nexus_paper_fetcher.methodology as methodology
+    import scholar_fetch.methodology as methodology
 
     monkeypatch.setattr(methodology, "config", type("c", (), {"OPENAI_API_KEY": "fake-key"})())
     papers = [
@@ -17,7 +17,7 @@ async def test_classify_methodology_uses_compact_codes(monkeypatch):
     mock_response = MagicMock()
     mock_response.choices[0].message.content = json.dumps({"categories": ["V", "M"]})
 
-    with patch("nexus_paper_fetcher.methodology.AsyncOpenAI") as mock_cls:
+    with patch("scholar_fetch.methodology.AsyncOpenAI") as mock_cls:
         mock_client = MagicMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
         mock_cls.return_value = mock_client
@@ -29,7 +29,7 @@ async def test_classify_methodology_uses_compact_codes(monkeypatch):
 
 
 async def test_classify_methodology_falls_back_on_bad_json(monkeypatch):
-    import nexus_paper_fetcher.methodology as methodology
+    import scholar_fetch.methodology as methodology
 
     monkeypatch.setattr(methodology, "config", type("c", (), {"OPENAI_API_KEY": "fake-key"})())
     paper = Paper.create(
@@ -41,7 +41,7 @@ async def test_classify_methodology_falls_back_on_bad_json(monkeypatch):
     mock_response = MagicMock()
     mock_response.choices[0].message.content = '{"categories": ["D"'
 
-    with patch("nexus_paper_fetcher.methodology.AsyncOpenAI") as mock_cls:
+    with patch("scholar_fetch.methodology.AsyncOpenAI") as mock_cls:
         mock_client = MagicMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
         mock_cls.return_value = mock_client

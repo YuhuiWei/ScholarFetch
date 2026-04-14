@@ -6,3 +6,9 @@ __pycache__/
 dist/
 .env
 .worktrees/
+
+# Internal dev artifacts — not published
+CLAUDE.md
+CODEX_CHANGES.md
+PHASE_2_SUMMARY.md
+docs/

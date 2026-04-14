@@ -6,7 +6,7 @@ from typing import Optional
 
 from rapidfuzz import fuzz
 
-from nexus_paper_fetcher.models import Paper, RunResult
+from scholar_fetch.models import Paper, RunResult
 
 
 @dataclass

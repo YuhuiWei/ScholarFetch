@@ -2,7 +2,7 @@ import os
 
 OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
 S2_API_KEY: str = os.environ.get("S2_API_KEY", "")
-POLITE_POOL_EMAIL: str = os.environ.get("NEXUS_EMAIL", "nexus@research.local")
+POLITE_POOL_EMAIL: str = os.environ.get("SCHOLAR_EMAIL", "scholar@research.local")
 OPENREVIEW_BASEURL: str = os.environ.get("OPENREVIEW_BASEURL", "https://api2.openreview.net")
 OPENREVIEW_USERNAME: str = os.environ.get("OPENREVIEW_USERNAME", "")
 OPENREVIEW_PASSWORD: str = os.environ.get("OPENREVIEW_PASSWORD", "")
