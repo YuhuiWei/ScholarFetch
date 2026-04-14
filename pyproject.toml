@@ -5,6 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scholar-fetch"
 version = "0.3.0"
+description = "Ranked academic paper search and full-text download pipeline"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "YuhuiWei" }]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
