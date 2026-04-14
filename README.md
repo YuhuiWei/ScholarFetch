@@ -13,10 +13,31 @@ Phase 2: scholar download  →  downloaded files + download_status in JSON + man
 
 ---
 
-## Setup
+## Installation
+
+**From GitHub (recommended):**
 
 ```bash
+pip install git+https://github.com/YuhuiWei/ScholarFetch.git
+```
+
+**For contributors (editable install with dev dependencies):**
+
+```bash
+git clone https://github.com/YuhuiWei/ScholarFetch.git
+cd ScholarFetch
 pip install -e ".[dev]"
+```
+
+Requires Python 3.11+.
+
+## Configuration
+
+Set environment variables before use:
+
+```bash
+# For OpenAlex polite pool (recommended)
+export SCHOLAR_EMAIL=you@institution.edu
 
 # Optional — enables NLP query parsing, relevance scoring, methodology classification
 export OPENAI_API_KEY=sk-...
@@ -28,14 +49,8 @@ export S2_API_KEY=...
 export OPENREVIEW_USERNAME=you@example.edu
 export OPENREVIEW_PASSWORD=...
 
-# For OpenAlex polite pool
-export SCHOLAR_EMAIL=you@institution.edu
-
-# Preferred default output directory for downloaded files
+# Default output directory for downloaded files
 export SCHOLAR_DOWNLOAD_DIR=/path/to/papers
-
-# Legacy fallback (still supported)
-export SCHOLAR_PDF_DIR=/path/to/papers
 ```
 
 ---
